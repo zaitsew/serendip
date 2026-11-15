@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { quotaDay } from "../src/core/detour";
 import { FIXTURE_FILMS } from "../src/catalog/fixture";
 import { createSample } from "../src/catalog/sample";
 import { buildFeed, importNetflix, tastesOf } from "../src/server/service";
@@ -10,7 +11,10 @@ const [a, b, c] = FIXTURE_FILMS as [(typeof FIXTURE_FILMS)[number], (typeof FIXT
 
 describe("store and usage probe", () => {
   it("starts at zero", () => {
-    expect(fresh().usage()).toEqual({ seeds: 0, seen: 0, picks_shown: 0, opens: 0, saves: 0, dismissals: 0, evenings_logged: 0, last_open: "never" });
+    expect(fresh().usage()).toEqual({
+      seeds: 0, seen: 0, picks_shown: 0, opens: 0, saves: 0, dismissals: 0, evenings_logged: 0, last_open: "never",
+      takeout_videos: 0, detour_fields: 0, detour_picks_shown: 0, detour_watches: 0, detour_dismissals: 0, search_calls_today: 0, youtube_connected: 0,
+    });
   });
 
   it("counts seeds, seen, picks, opens, saves, dismissals and evenings", () => {
@@ -24,6 +28,19 @@ describe("store and usage probe", () => {
     const u = s.usage();
     expect(u).toMatchObject({ seeds: 1, seen: 2, picks_shown: 1, opens: 2, saves: 1, dismissals: 1, evenings_logged: 1 });
     expect(String(u.last_open)).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  });
+
+  it("counts the Detour lane in the usage probe", () => {
+    const s = fresh();
+    s.yt.replaceWatched([{ videoId: "aaaaaaaaaaa", title: "t", channel: "c", channelId: null, lastAt: 1, plays: 2 }]);
+    s.yt.setFields(["physics", "jazz"]);
+    s.event("detour_shown", null, { videoId: "aaaaaaaaaaa" });
+    s.event("detour_shown", null, { videoId: "bbbbbbbbbbb" });
+    s.event("detour_watch", null, { videoId: "aaaaaaaaaaa" });
+    s.yt.detourAct({ videoId: "aaaaaaaaaaa", action: "dismiss", field: "physics", channelId: "UC1", channelTitle: "c", title: "t" });
+    s.yt.setSealedToken("sealed");
+    s.yt.addUsage(quotaDay(Date.now()), 3, 300);
+    expect(s.usage()).toMatchObject({ takeout_videos: 1, detour_fields: 2, detour_picks_shown: 2, detour_watches: 1, detour_dismissals: 1, search_calls_today: 3, youtube_connected: 1 });
   });
 
   it("a Seen or Not-for-me action removes a saved film from Saved", () => {

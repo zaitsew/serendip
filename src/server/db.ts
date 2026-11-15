@@ -19,6 +19,16 @@ CREATE TABLE IF NOT EXISTS actions (film_id INTEGER NOT NULL, action TEXT NOT NU
 CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT NOT NULL, film_id INTEGER, meta TEXT, at INTEGER NOT NULL);
 CREATE INDEX IF NOT EXISTS events_type ON events (type, at);
 CREATE TABLE IF NOT EXISTS evenings (day TEXT PRIMARY KEY, watched TEXT NOT NULL, source TEXT NOT NULL, enjoyment INTEGER, minutes_to_choose INTEGER, at INTEGER NOT NULL);
+-- S2: the Takeout watch history, one row per video (repeat watches add to plays).
+CREATE TABLE IF NOT EXISTS yt_watched (video_id TEXT PRIMARY KEY, title TEXT NOT NULL, channel TEXT, channel_id TEXT, last_at INTEGER NOT NULL, plays INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS yt_watched_at ON yt_watched (last_at);
+-- videos.list metadata for watched videos, cached forever (found = false is cached too).
+CREATE TABLE IF NOT EXISTS yt_meta (video_id TEXT PRIMARY KEY, json TEXT NOT NULL);
+-- YouTube quota days (Pacific): search calls made and units assumed.
+CREATE TABLE IF NOT EXISTS yt_usage (day TEXT PRIMARY KEY, searches INTEGER NOT NULL DEFAULT 0, units INTEGER NOT NULL DEFAULT 0);
+-- action: save, seen, dismiss. One row per video; the newest action wins.
+CREATE TABLE IF NOT EXISTS detour_actions (video_id TEXT PRIMARY KEY, action TEXT NOT NULL, field TEXT, channel_key TEXT, title TEXT, channel_title TEXT, at INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS detour_mutes (channel_key TEXT PRIMARY KEY, until INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS unmatched (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, year INTEGER, source TEXT NOT NULL, at INTEGER NOT NULL);
 `;
 
