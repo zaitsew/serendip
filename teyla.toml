@@ -12,11 +12,11 @@ primary = "web"                         # one web app: /tv in the Xiaomi Google 
 identity = "shared-key"
 tenancy = "single"                      # one owner, one SQLite file
 backend = "local-mac"                   # S3 moves it to the droplet
-llm = "none"                            # S1 ranking is deterministic; no model anywhere
+llm = "none"                            # ranking and clustering are deterministic; no model anywhere
 first_run = "sign-in"
-sample_data = "labelled"                # no TMDB token: a banner says "Sample catalog — add TMDB_READ_TOKEN"
+sample_data = "labelled"                # no TMDB token: a banner says "Sample catalog — add TMDB_READ_TOKEN"; no YOUTUBE_API_KEY: Detour says "Sample — add YOUTUBE_API_KEY"
 onboarding_doc = "docs/GETTING-STARTED.md"
-secrets = ["SERENDIP_OWNER_KEY", "TMDB_READ_TOKEN"]
+secrets = ["SERENDIP_OWNER_KEY", "TMDB_READ_TOKEN", "YOUTUBE_API_KEY", "GOOGLE_OAUTH_CLIENT_ID", "GOOGLE_OAUTH_CLIENT_SECRET"]
 cost_cap = ""
 
 [productize.distribution]
@@ -28,14 +28,26 @@ how = "clone the repo, run ./setup.sh, then ./check.sh, read what it says"
 status = "untested"
 
 [[check]]
+name = "Takeout import and the cluster bars work on a real watch-history.json"
+how = "upload your watch-history.json at /setup; with YOUTUBE_API_KEY the bars show topics, without it channels"
+status = "untested"
+
+[[check]]
+name = "Connect YouTube writes the private 'Serendip Detour' playlist"
+how = "set the OAuth client in .env, open http://localhost:3000/detour on the Mac, press Connect YouTube, Refresh now, then open YouTube on the TV"
+status = "untested"
+
+[[check]]
 name = "/tv works with a D-pad remote on the Xiaomi Google TV browser"
 how = "npm run dev -- -H 0.0.0.0, open http://<mac-ip>:3000/tv?v=a and ?v=b on the TV; zap with the arrows, OK opens actions, Back closes"
 status = "untested"
 
 [security]
-# The store holds: the taste list (film titles), what you saw or saved, an evening log, and a TMDB cache.
-# No payment data, no health data, no messages, no files. No third-party calls except TMDB (server) and
-# youtube-nocookie.com embeds (browser, trailers only).
+# The store holds: the taste list (film titles), what you saw or saved, an evening log, a TMDB cache, your
+# YouTube watch history from Takeout (video ids, titles, channel names), video metadata, Detour actions, and,
+# when you connect YouTube, an encrypted OAuth refresh token. No payment data, no health data, no messages.
+# Third-party calls: TMDB, the YouTube Data API and Google OAuth (server); youtube-nocookie.com embeds
+# and i.ytimg.com thumbnails (browser).
 data = ["account"]
 trifecta = []
 secrets = "runtime-env"

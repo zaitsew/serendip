@@ -21,6 +21,7 @@ export default function Home() {
       <nav className="nav" aria-label="Main">
         <Link className="btn btn-primary" href="/tv">Open the channels</Link>
         <Link className="btn" href="/tv?v=b">Variant B</Link>
+        <Link className="btn" href="/detour">Detour</Link>
         <Link className="btn" href="/setup">Setup</Link>
         <Link className="btn" href="/log">Evening log</Link>
       </nav>
