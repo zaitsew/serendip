@@ -1,0 +1,40 @@
+import { DatabaseSync } from "node:sqlite";
+import { mkdirSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+
+/**
+ * One local SQLite file (node:sqlite, Node 24+). SERENDIP_DB overrides the path; ":memory:" is for tests.
+ * One owner, so there is no user_id: the file is the tenant.
+ */
+
+const SCHEMA = `
+CREATE TABLE IF NOT EXISTS cache (key TEXT PRIMARY KEY, body TEXT NOT NULL, fetched_at INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+-- A snapshot of every film the person told us about, so seeds and seen work offline.
+CREATE TABLE IF NOT EXISTS films (id INTEGER PRIMARY KEY, json TEXT NOT NULL);
+-- role: seed (loved), dislike, seen
+CREATE TABLE IF NOT EXISTS marks (film_id INTEGER NOT NULL, role TEXT NOT NULL, rating REAL, source TEXT NOT NULL, at INTEGER NOT NULL, PRIMARY KEY (film_id, role));
+-- action: save, seen, dismiss
+CREATE TABLE IF NOT EXISTS actions (film_id INTEGER NOT NULL, action TEXT NOT NULL, at INTEGER NOT NULL, PRIMARY KEY (film_id, action));
+CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT NOT NULL, film_id INTEGER, meta TEXT, at INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS events_type ON events (type, at);
+CREATE TABLE IF NOT EXISTS evenings (day TEXT PRIMARY KEY, watched TEXT NOT NULL, source TEXT NOT NULL, enjoyment INTEGER, minutes_to_choose INTEGER, at INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS unmatched (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, year INTEGER, source TEXT NOT NULL, at INTEGER NOT NULL);
+`;
+
+export function dbPath(env: Record<string, string | undefined> = process.env): string {
+  return env.SERENDIP_DB?.trim() || resolve(process.cwd(), "data", "serendip.db");
+}
+
+export function openDb(path: string = dbPath()): DatabaseSync {
+  if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
+  const db = new DatabaseSync(path);
+  db.exec("PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 3000;");
+  db.exec(SCHEMA);
+  return db;
+}
+
+const g = globalThis as unknown as { __serendipDb?: DatabaseSync };
+export function db(): DatabaseSync {
+  return (g.__serendipDb ??= openDb());
+}
