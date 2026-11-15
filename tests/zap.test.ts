@@ -67,3 +67,14 @@ describe("zap", () => {
     expect(press(s0, "q")).toEqual(s0);
   });
 });
+
+describe("removeFilm across channels", () => {
+  it("drops the film everywhere and keeps your place in each channel", () => {
+    const s0 = { counts: [4, 4], channel: 0, position: [1, 3], sheet: null };
+    const { state } = zap(s0, { type: "removeFilm", indices: [1, 0] });
+    expect(state.counts).toEqual([3, 3]);
+    expect(state.position).toEqual([1, 2]); // channel 1 shifted under you
+    const last = zap({ counts: [1, 2], channel: 0, position: [0, 0], sheet: 0 }, { type: "removeFilm", indices: [0, -1] }).state;
+    expect(last).toMatchObject({ counts: [0, 2], channel: 1, sheet: null });
+  });
+});

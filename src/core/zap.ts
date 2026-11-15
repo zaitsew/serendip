@@ -27,6 +27,8 @@ export type ZapInput =
   | { type: "tap" }
   | { type: "choose"; action: SheetAction }
   | { type: "removeCurrent" }
+  /** A film left several channels at once: its index in each channel, or -1 where it was not there. */
+  | { type: "removeFilm"; indices: number[] }
   | { type: "counts"; counts: number[] };
 
 export type ZapEffect = { type: "action"; action: SheetAction } | null;
@@ -81,6 +83,16 @@ export function zap(s: ZapState, input: ZapInput): { state: ZapState; effect: Za
     const position = [...s.position];
     position[s.channel] = counts[s.channel] ? Math.min(position[s.channel] ?? 0, counts[s.channel]! - 1) : 0;
     const channel = counts[s.channel] ? s.channel : firstWithFilms(counts, s.channel, 1);
+    return none({ ...s, counts, position, channel, sheet: null });
+  }
+  if (input.type === "removeFilm") {
+    const counts = s.counts.map((c, i) => ((input.indices[i] ?? -1) >= 0 ? Math.max(0, c - 1) : c));
+    const position = s.position.map((p, i) => {
+      const at = input.indices[i] ?? -1;
+      const moved = at >= 0 && at < p ? p - 1 : p; // a film removed before you shifts the list under you
+      return Math.max(0, Math.min(moved, (counts[i] ?? 0) - 1));
+    });
+    const channel = (counts[s.channel] ?? 0) > 0 ? s.channel : firstWithFilms(counts, s.channel, 1);
     return none({ ...s, counts, position, channel, sheet: null });
   }
   if (input.type === "choose") return { state: { ...s, sheet: null }, effect: { type: "action", action: input.action } };

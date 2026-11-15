@@ -125,6 +125,7 @@ input[type="text"], input[type="search"], input[type="number"], input[type="date
 
 .prompt { position: absolute; z-index: 15; left: 50%; top: max(11vmin, 84px); transform: translateX(-50%); width: min(44rem, 94vw); display: flex; gap: 1rem; align-items: center; justify-content: space-between; padding: 0.9rem 1.1rem; border-radius: 16px; background: rgba(21, 25, 35, 0.94); border: 2px solid var(--accent); font-size: clamp(1rem, 2.1vmin, 1.6rem); }
 .prompt .row { flex: none; }
+.toast { position: absolute; z-index: 16; left: 50%; bottom: max(8vmin, 64px); transform: translateX(-50%); max-width: 94vw; padding: 0.8rem 1.2rem; border-radius: 14px; background: rgba(60, 20, 20, 0.95); border: 2px solid #e5736b; font-size: clamp(1rem, 2.1vmin, 1.5rem); }
 .tv-state { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 2rem; gap: 1rem; font-size: clamp(1.2rem, 3vmin, 2.2rem); align-content: center; }
 
 .tv-foot { font-size: 11px; color: #8d94a3; line-height: 1.3; }

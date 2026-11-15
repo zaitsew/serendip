@@ -94,6 +94,7 @@ export function TvApp({ variant }: { variant: "a" | "b" }) {
   const router = useRouter();
   const [trailerFor, setTrailerFor] = useState<number | null>(null);
   const [askDay, setAskDay] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const shown = useRef(new Set<number>());
   const latest = useRef({ state, channels, askDay });
   useEffect(() => {
@@ -136,17 +137,29 @@ export function TvApp({ variant }: { variant: "a" | "b" }) {
     return () => clearTimeout(t);
   }, [pick?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const run = useCallback((action: SheetAction) => {
+  const run = useCallback(async (action: SheetAction) => {
     const { state: s, channels: chs } = latest.current;
     const p = chs[s.channel]?.picks[s.position[s.channel] ?? 0];
     if (!p) return;
     if (action === "watch") {
-      if (!window.open(p.watchUrl, "_blank", "noopener")) window.location.assign(p.watchUrl);
+      // One window.open call: with "noopener" it returns null even when the tab opened, so drop the opener by hand.
+      const w = window.open(p.watchUrl, "_blank");
+      if (w) { try { w.opener = null; } catch { /* cross-origin already */ } } else window.location.assign(p.watchUrl);
       return;
     }
-    post("/api/action", { filmId: p.id, action });
-    setChannels((cs) => cs.map((c, i) => (i === s.channel ? { ...c, picks: c.picks.filter((x) => x.id !== p.id) } : c)));
-    dispatchZap({ type: "removeCurrent" });
+    let ok = false;
+    try {
+      ok = (await fetch("/api/action", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ filmId: p.id, action }) })).ok;
+    } catch { ok = false; }
+    if (!ok) {
+      setNotice("Could not save that. The film is still here; try again.");
+      setTimeout(() => setNotice(null), 4000);
+      return;
+    }
+    // Saved, seen or not for me: the film leaves every channel it was in, not just this one.
+    const indices = latest.current.channels.map((c) => c.picks.findIndex((x) => x.id === p.id));
+    setChannels((cs) => cs.map((c) => ({ ...c, picks: c.picks.filter((x) => x.id !== p.id) })));
+    dispatchZap({ type: "removeFilm", indices });
   }, []);
 
   const input = useCallback((i: ZapInput) => {
@@ -165,6 +178,8 @@ export function TvApp({ variant }: { variant: "a" | "b" }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
+      // A focused link or button keeps its own Enter and Space (the "Open setup" link on the fallback screens).
+      if ((e.key === "Enter" || e.key === " ") && (e.target as HTMLElement | null)?.closest?.("a, button, input, select, textarea")) return;
       const { askDay: day, state: s } = latest.current;
       if (day && s.sheet === null) {
         if (e.key === "Enter") { e.preventDefault(); router.push(`/log?day=${day}`); return; }
@@ -243,6 +258,8 @@ export function TvApp({ variant }: { variant: "a" | "b" }) {
           <div className="bottom"><Strip channels={channels} active={state.channel} />{foot}</div>
         </>
       )}
+
+      {notice ? <div className="toast" role="alert">{notice}</div> : null}
 
       {askDay && state.sheet === null ? (
         <div className="prompt" role="dialog" aria-label="Evening log">

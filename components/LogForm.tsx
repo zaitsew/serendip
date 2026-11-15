@@ -12,6 +12,14 @@ function today(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+/** The saved evenings, or an empty list when the server answers with an error. */
+async function fetchEvenings(): Promise<Evening[]> {
+  const r = await fetch("/api/evening");
+  if (!r.ok) return [];
+  const b = (await r.json().catch(() => null)) as { evenings?: Evening[] } | null;
+  return Array.isArray(b?.evenings) ? b.evenings : [];
+}
+
 export function LogForm({ initialDay }: { initialDay: string | null }) {
   const [day, setDay] = useState(() => initialDay ?? today());
   const [watched, setWatched] = useState("");
@@ -22,10 +30,10 @@ export function LogForm({ initialDay }: { initialDay: string | null }) {
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   const load = useCallback(() => {
-    fetch("/api/evening").then((r) => r.json()).then((b: { evenings: Evening[] }) => setList(b.evenings)).catch(() => undefined);
+    fetchEvenings().then(setList).catch(() => undefined);
   }, []);
   useEffect(() => {
-    fetch("/api/evening").then((r) => r.json()).then((b: { evenings: Evening[] }) => setList(b.evenings)).catch(() => undefined);
+    fetchEvenings().then(setList).catch(() => undefined);
   }, []);
 
   const submit = async (e: React.FormEvent) => {
