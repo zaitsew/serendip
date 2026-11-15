@@ -126,63 +126,87 @@ describe("connect flow", () => {
   });
 });
 
-/** An in-memory playlist with a call log. */
-function fakePlaylist(initial: PlaylistItem[] = [], opts: { exists?: boolean } = {}) {
+/** In-memory playlists with a call log. `lists` maps playlist id to privacy and items. */
+function fakePlaylist(seed: Record<string, { privacy: string; items: PlaylistItem[] }> = {}) {
   const log: string[] = [];
-  let items = [...initial];
+  const lists = new Map(Object.entries(seed).map(([id, v]) => [id, { privacy: v.privacy, items: [...v.items] }]));
   let next = 100;
-  let exists = opts.exists ?? true;
+  let created = 0;
   const client: PlaylistClient = {
-    async findPlaylist(t) { log.push(`find ${t}`); return exists ? "PL1" : null; },
-    async createPlaylist(t) { log.push(`create ${t}`); exists = true; return "PL1"; },
+    async getPlaylist(id) { log.push(`get ${id}`); const l = lists.get(id); return l ? { privacy: l.privacy } : null; },
+    async createPlaylist(t) { const id = `NEW${++created}`; log.push(`create ${t}`); lists.set(id, { privacy: "private", items: [] }); return id; },
     async listItems(id) {
       log.push(`list ${id}`);
-      if (id !== "PL1" || !exists) throw new OAuthError("playlistNotFound", "gone");
-      return [...items];
+      const l = lists.get(id);
+      if (!l) throw new OAuthError("playlistNotFound", "gone");
+      return [...l.items];
     },
-    async deleteItem(id) { log.push(`delete ${id}`); items = items.filter((i) => i.itemId !== id); },
-    async insertItem(_p, videoId, position) { log.push(`insert ${videoId}@${position}`); items.splice(Math.min(position, items.length), 0, { itemId: `n${next++}`, videoId }); },
+    async deleteItem(id) { log.push(`delete ${id}`); for (const l of lists.values()) l.items = l.items.filter((i) => i.itemId !== id); },
+    async insertItem(p, videoId, position) { log.push(`insert ${p}:${videoId}@${position}`); const l = lists.get(p)!; l.items.splice(Math.min(position, l.items.length), 0, { itemId: `n${next++}`, videoId }); },
   };
-  return { client, log, videos: () => items.map((i) => i.videoId) };
+  return { client, log, videos: (id: string) => lists.get(id)!.items.map((i) => i.videoId) };
 }
 
 describe("playlist sync", () => {
-  it("creates the private playlist when none exists and inserts every video", async () => {
+  it("creates a private playlist when none is stored and inserts every video", async () => {
     const s = createStore(openDb(":memory:"));
-    const f = fakePlaylist([], { exists: false });
+    const f = fakePlaylist();
     const r = await syncPlaylist(f.client, s, ["A", "B", "C"]);
-    expect(r).toEqual({ added: 3, removed: 0, playlistId: "PL1" });
-    expect(f.log.slice(0, 2)).toEqual(["find Serendip Detour", "create Serendip Detour"]);
-    expect(f.videos()).toEqual(["A", "B", "C"]);
-    expect(s.yt.getPlaylistId()).toBe("PL1");
+    expect(r).toEqual({ added: 3, removed: 0, playlistId: "NEW1" });
+    expect(f.log[0]).toBe("create Serendip Detour");
+    expect(f.videos("NEW1")).toEqual(["A", "B", "C"]);
+    expect(s.yt.getPlaylistId()).toBe("NEW1");
+  });
+
+  it("never writes to a public playlist, even one with the same title: it creates a private one instead", async () => {
+    const s = createStore(openDb(":memory:"));
+    const f = fakePlaylist({ PUB: { privacy: "public", items: [{ itemId: "i1", videoId: "OLD" }] } });
+    s.yt.setPlaylistId("PUB"); // e.g. the owner made it public later
+    const r = await syncPlaylist(f.client, s, ["A"]);
+    expect(r.playlistId).toBe("NEW1");
+    expect(f.videos("PUB")).toEqual(["OLD"]); // untouched
+    expect(f.log.some((l) => /^(insert|delete) PUB/.test(l) || l === "delete i1")).toBe(false);
+    expect(s.yt.getPlaylistId()).toBe("NEW1");
+    // Unlisted counts as not private too.
+    const g = fakePlaylist({ UN: { privacy: "unlisted", items: [] } });
+    s.yt.setPlaylistId("UN");
+    expect((await syncPlaylist(g.client, s, ["A"])).playlistId).toBe("NEW1");
+  });
+
+  it("does not adopt a playlist it did not create: with no stored id it never looks one up by title", async () => {
+    const s = createStore(openDb(":memory:"));
+    const f = fakePlaylist({ SOMEONES: { privacy: "private", items: [] } });
+    await syncPlaylist(f.client, s, ["A"]);
+    expect(f.log.some((l) => l.includes("SOMEONES"))).toBe(false);
+    expect(s.yt.getPlaylistId()).toBe("NEW1");
   });
 
   it("deletes old items first, then inserts, and ends with exactly today's list", async () => {
     const s = createStore(openDb(":memory:"));
     s.yt.setPlaylistId("PL1");
-    const f = fakePlaylist([{ itemId: "i1", videoId: "OLD1" }, { itemId: "i2", videoId: "KEEP" }, { itemId: "i3", videoId: "OLD2" }]);
+    const f = fakePlaylist({ PL1: { privacy: "private", items: [{ itemId: "i1", videoId: "OLD1" }, { itemId: "i2", videoId: "KEEP" }, { itemId: "i3", videoId: "OLD2" }] } });
     const r = await syncPlaylist(f.client, s, ["NEW1", "KEEP", "NEW2"]);
     expect(r).toMatchObject({ added: 2, removed: 2 });
     const firstInsert = f.log.findIndex((l) => l.startsWith("insert"));
     const lastDelete = f.log.map((l) => l.startsWith("delete")).lastIndexOf(true);
     expect(lastDelete).toBeLessThan(firstInsert);
-    expect([...f.videos()].sort()).toEqual(["KEEP", "NEW1", "NEW2"]);
+    expect([...f.videos("PL1")].sort()).toEqual(["KEEP", "NEW1", "NEW2"]);
     expect(f.log).not.toContain("delete i2"); // an overlapping video is kept, saving 50 quota units
   });
 
-  it("finds the playlist again when the stored id is gone", async () => {
+  it("creates a new private playlist when the stored one is gone", async () => {
     const s = createStore(openDb(":memory:"));
     s.yt.setPlaylistId("DEAD");
-    const f = fakePlaylist([{ itemId: "i1", videoId: "A" }]);
+    const f = fakePlaylist();
     const r = await syncPlaylist(f.client, s, ["A", "B"]);
-    expect(r).toMatchObject({ added: 1, removed: 0, playlistId: "PL1" });
-    expect(s.yt.getPlaylistId()).toBe("PL1");
+    expect(r).toMatchObject({ added: 2, removed: 0, playlistId: "NEW1" });
+    expect(s.yt.getPlaylistId()).toBe("NEW1");
   });
 
   it("syncToYoutube records the result, and drops a revoked token", async () => {
     const s = createStore(openDb(":memory:"));
     s.yt.setSealedToken(encryptSecret("rt", "owner-key"));
-    const f = fakePlaylist([], { exists: true });
+    const f = fakePlaylist({ PL1: { privacy: "private", items: [] } });
     s.yt.setPlaylistId("PL1");
     const tokenFetch = (async () => json({ access_token: "at" })) as unknown as typeof fetch;
     expect(await syncToYoutube(s, deps({ fetch: tokenFetch, playlist: () => f.client }), ["A", "B"])).toBe("synced");

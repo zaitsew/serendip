@@ -234,19 +234,32 @@ export function isConnected(store: Store): boolean {
   return store.yt.getSealedToken() !== null;
 }
 
-/** Find or create "Serendip Detour", then make it hold exactly `videoIds`. */
-export async function syncPlaylist(client: PlaylistClient, store: Store, videoIds: string[]): Promise<{ added: number; removed: number; playlistId: string }> {
+/**
+ * Make the playlist Serendip created hold exactly `videoIds`. A playlist is used only while its id is the
+ * one we stored after creating it AND it is still private. Anything else (a public playlist that happens
+ * to share the title, one the owner made public later, one that was deleted) is left alone and a new
+ * private one is created. Never writes to a non-private playlist.
+ */
+export async function syncPlaylist(client: PlaylistClient, store: Store, videoIds: string[]): Promise<{ added: number; removed: number; playlistId: string | null }> {
   let id = store.yt.getPlaylistId();
-  let existing: Awaited<ReturnType<PlaylistClient["listItems"]>> | null = null;
   if (id) {
-    try { existing = await client.listItems(id); } catch (e) { if (!(e instanceof OAuthError) || e.code !== "playlistNotFound") throw e; id = null; }
+    const info = await client.getPlaylist(id);
+    if (!info || info.privacy !== "private") { store.yt.clearPlaylistId(); id = null; }
   }
   if (!id) {
-    id = (await client.findPlaylist(PLAYLIST_TITLE)) ?? (await client.createPlaylist(PLAYLIST_TITLE, "Videos from outside your usual. Rewritten daily by Serendip."));
+    if (videoIds.length === 0) return { added: 0, removed: 0, playlistId: null }; // nothing to clear, nothing to create
+    id = await client.createPlaylist(PLAYLIST_TITLE, "Videos from outside your usual. Rewritten daily by Serendip.");
     store.yt.setPlaylistId(id);
-    existing = await client.listItems(id);
   }
-  const plan = planPlaylistSync(existing ?? [], videoIds);
+  let existing: Awaited<ReturnType<PlaylistClient["listItems"]>>;
+  try {
+    existing = await client.listItems(id);
+  } catch (e) {
+    if (!(e instanceof OAuthError) || e.code !== "playlistNotFound") throw e;
+    store.yt.clearPlaylistId();
+    return syncPlaylist(client, store, videoIds);
+  }
+  const plan = planPlaylistSync(existing, videoIds);
   for (const itemId of plan.remove) await client.deleteItem(itemId); // old items first
   for (const a of plan.add) await client.insertItem(id, a.videoId, a.position);
   return { added: plan.add.length, removed: plan.remove.length, playlistId: id };

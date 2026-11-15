@@ -1,4 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { importTakeout } from "../src/server/detour";
+import { openDb } from "../src/server/db";
+import { createStore } from "../src/server/store";
 import { dedupeWatched, parseTakeout, TakeoutError, videoIdFromUrl } from "../src/core/takeout";
 
 const watch = (id: string, over: Record<string, unknown> = {}) => ({
@@ -60,5 +63,27 @@ describe("Takeout parser", () => {
     const rows = dedupeWatched(r.entries);
     expect(rows).toHaveLength(2);
     expect(rows.find((x) => x.videoId === "aaaaaaaaaaa")).toMatchObject({ plays: 2, lastAt: Date.parse("2026-11-05T00:00:00Z") });
+  });
+
+  it("rejects search-history.json with a clear message", () => {
+    const search = [1, 2, 3].map((i) => ({ header: "YouTube", title: `Searched for thing ${i}`, titleUrl: `https://www.youtube.com/results?search_query=thing+${i}`, time: "2026-11-01T10:00:00Z", products: ["YouTube"] }));
+    try { parseTakeout(JSON.stringify(search)); expect.unreachable(); } catch (e) { expect((e as TakeoutError).code).toBe("search"); expect((e as Error).message).toMatch(/search-history/); }
+    // Search URLs alone are enough, whatever the title says.
+    expect(() => parseTakeout(JSON.stringify([{ title: "x", titleUrl: "https://www.youtube.com/results?search_query=a" }]))).toThrowError(/search-history/);
+  });
+
+  it("rejects a file with no valid watch entries instead of returning an empty history", () => {
+    try { parseTakeout("[]"); expect.unreachable(); } catch (e) { expect((e as TakeoutError).code).toBe("no_watches"); }
+    expect(() => parseTakeout(JSON.stringify([{ title: "Watched a video that has been removed" }, { header: "YouTube Music", title: "Watched Song", titleUrl: "https://music.youtube.com/watch?v=aaaaaaaaaaa" }]))).toThrowError(/No watched videos/);
+  });
+
+  it("a rejected upload leaves the stored history untouched", () => {
+    const s = createStore(openDb(":memory:"));
+    importTakeout(s, JSON.stringify([watch("aaaaaaaaaaa"), watch("bbbbbbbbbbb")]));
+    expect(s.yt.watchedCount()).toBe(2);
+    const search = JSON.stringify([{ header: "YouTube", title: "Searched for x", titleUrl: "https://www.youtube.com/results?search_query=x" }]);
+    for (const bad of [search, "[]", "<html></html>", "not json"]) expect(() => importTakeout(s, bad)).toThrow();
+    expect(s.yt.watchedCount()).toBe(2);
+    expect(s.yt.watchedIds().has("aaaaaaaaaaa")).toBe(true);
   });
 });

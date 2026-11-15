@@ -96,7 +96,8 @@ export async function revoke(f: FetchFn, token: string): Promise<boolean> {
 
 /** The calls the playlist sync needs. A fake implements this in tests. */
 export interface PlaylistClient {
-  findPlaylist(title: string): Promise<string | null>;
+  /** The playlist's privacy status, or null when it does not exist (any more). */
+  getPlaylist(id: string): Promise<{ privacy: string } | null>;
   createPlaylist(title: string, description: string): Promise<string>;
   listItems(playlistId: string): Promise<PlaylistItem[]>;
   deleteItem(itemId: string): Promise<void>;
@@ -119,18 +120,10 @@ export function createPlaylistClient(f: FetchFn, token: string): PlaylistClient 
     return data;
   };
   return {
-    async findPlaylist(title) {
-      let pageToken: string | undefined;
-      for (let page = 0; page < 10; page++) {
-        const q: Record<string, string> = { part: "snippet", mine: "true", maxResults: "50" };
-        if (pageToken) q.pageToken = pageToken;
-        const d = (await go("GET", "playlists", q)) as { items?: Array<{ id: string; snippet?: { title?: string } }>; nextPageToken?: string };
-        const hit = d.items?.find((p) => p.snippet?.title === title);
-        if (hit) return hit.id;
-        pageToken = d.nextPageToken;
-        if (!pageToken) return null;
-      }
-      return null;
+    async getPlaylist(id) {
+      const d = (await go("GET", "playlists", { part: "status", id, maxResults: "1" })) as { items?: Array<{ id: string; status?: { privacyStatus?: string } }> };
+      const hit = d.items?.find((p) => p.id === id);
+      return hit ? { privacy: hit.status?.privacyStatus ?? "unknown" } : null;
     },
     async createPlaylist(title, description) {
       const d = (await go("POST", "playlists", { part: "snippet,status" }, { snippet: { title, description }, status: { privacyStatus: "private" } })) as { id?: string };

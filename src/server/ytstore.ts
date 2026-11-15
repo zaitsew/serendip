@@ -95,6 +95,7 @@ export function createYtStore(d: DatabaseSync, kv: Kv, now: () => number = Date.
     setPlaylistStatus(s: PlaylistStatus): void { kv.set("yt_playlist_status", JSON.stringify(s)); },
     getPlaylistId(): string | null { return kv.get("yt_playlist_id"); },
     setPlaylistId(id: string): void { kv.set("yt_playlist_id", id); },
+    clearPlaylistId(): void { d.prepare("DELETE FROM kv WHERE key = 'yt_playlist_id'").run(); },
 
     detourAct(a: { videoId: string; action: DetourAction; field: string | null; channelId: string | null; channelTitle: string | null; title: string | null }): void {
       const key = channelKey(a.channelId, a.channelTitle);

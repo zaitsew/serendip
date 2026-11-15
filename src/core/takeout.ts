@@ -22,7 +22,7 @@ export interface TakeoutResult {
 }
 
 export class TakeoutError extends Error {
-  constructor(readonly code: "html" | "empty" | "invalid", message: string) {
+  constructor(readonly code: "html" | "empty" | "invalid" | "search" | "no_watches", message: string) {
     super(message);
     this.name = "TakeoutError";
   }
@@ -67,6 +67,7 @@ export function parseTakeout(text: string): TakeoutResult {
   if (!Array.isArray(raw)) throw new TakeoutError("invalid", "Expected a JSON list of watch entries (watch-history.json).");
 
   const skipped = { ads: 0, music: 0, removed: 0, other: 0 };
+  let searches = 0;
   const entries: TakeoutEntry[] = [];
   for (const row of raw) {
     if (!row || typeof row !== "object") { skipped.other++; continue; }
@@ -78,6 +79,7 @@ export function parseTakeout(text: string): TakeoutResult {
     const title = typeof r.title === "string" ? r.title : "";
     const videoId = videoIdFromUrl(r.titleUrl);
     if (!videoId) {
+      if (/^Searched for /i.test(title) || (typeof r.titleUrl === "string" && /youtube\.com\/results\?.*search_query=/i.test(r.titleUrl))) searches++;
       if (/^Watched a video that has been removed/i.test(title) || (/^Watched /i.test(title) && !r.titleUrl)) skipped.removed++;
       else skipped.other++;
       continue;
@@ -92,6 +94,13 @@ export function parseTakeout(text: string): TakeoutResult {
       channelId: channelIdFromUrl(sub?.url),
       at: Number.isFinite(at) ? at : 0,
     });
+  }
+  // Never hand back something that would replace a good history with nothing, or with search terms.
+  if (searches > 0 && searches > entries.length) {
+    throw new TakeoutError("search", "That looks like search-history.json, not the watch history. In Google Takeout choose the YouTube history called watch-history (JSON) and upload watch-history.json.");
+  }
+  if (entries.length === 0) {
+    throw new TakeoutError("no_watches", `No watched videos were found in that file (${raw.length} rows, none a YouTube watch). Your existing history was not changed. Upload watch-history.json from Takeout.`);
   }
   return { entries, rows: raw.length, skipped };
 }
