@@ -84,6 +84,11 @@ export function createStore(d: DatabaseSync = defaultDb()) {
     actionIds(action: Action): Set<number> {
       return new Set((d.prepare("SELECT film_id AS id FROM actions WHERE action = ?").all(action) as Array<{ id: number }>).map((r) => r.id));
     },
+    /** Snapshots of films you pressed "Already seen" on, newest first. */
+    seenActionFilms(): Array<Film | Taste> {
+      const rows = d.prepare("SELECT f.json AS json FROM actions a JOIN films f ON f.id = a.film_id WHERE a.action = 'seen' ORDER BY a.at DESC").all() as Array<{ json: string }>;
+      return rows.map((r) => JSON.parse(r.json) as Film | Taste);
+    },
     savedFilms(): Film[] {
       const rows = d.prepare("SELECT f.json AS json FROM actions a JOIN films f ON f.id = a.film_id WHERE a.action = 'save' ORDER BY a.at DESC").all() as Array<{ json: string }>;
       return rows.map((r) => JSON.parse(r.json) as Film).filter((f) => Array.isArray(f.providers));

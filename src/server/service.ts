@@ -20,6 +20,19 @@ export function tasteFromHit(h: SearchHit, rating: number | null): Taste {
   return { id: h.id, title: h.title, year: h.year, genres: h.genres, country: h.country, rating };
 }
 
+/** Everything that shapes the usual cluster: seeds, films marked seen, and films you pressed "Already seen" on. */
+export function tastesOf(store: Store): Taste[] {
+  const tastes: Taste[] = [];
+  const counted = new Set<number>();
+  const rows = [...store.marked("seed"), ...store.marked("seen"), ...store.seenActionFilms().map((film) => ({ film, rating: null as number | null }))];
+  for (const row of rows) {
+    if (counted.has(row.film.id)) continue;
+    counted.add(row.film.id);
+    tastes.push(tasteOf(row.film, row.rating));
+  }
+  return tastes;
+}
+
 export interface Feed {
   mode: Catalog["mode"];
   channels: Channel[];
@@ -40,15 +53,14 @@ export async function buildFeed(store: Store, catalog: Catalog): Promise<Feed> {
     if (full) seedFilms.push(full);
   }
 
-  const tastes: Taste[] = [];
-  const counted = new Set<number>();
-  for (const row of [...seedRows, ...store.marked("seen")]) {
-    if (counted.has(row.film.id)) continue;
-    counted.add(row.film.id);
-    tastes.push(tasteOf(row.film, row.rating));
-  }
+  const tastes = tastesOf(store);
   const seen = store.seenIds();
   for (const id of store.ids("seed")) seen.add(id);
+
+  // Saved films come from the refreshed catalog cache, so a film that left your services drops out; the
+  // stored snapshot is only the fallback when the catalog cannot answer.
+  const savedFilms: Film[] = [];
+  for (const snap of store.savedFilms()) savedFilms.push(known.get(snap.id) ?? (await catalog.film(snap.id)) ?? snap);
 
   const channels = buildChannels({
     pool,
@@ -60,7 +72,7 @@ export async function buildFeed(store: Store, catalog: Catalog): Promise<Feed> {
     dismissedIds: store.actionIds("dismiss"),
     savedIds: store.actionIds("save"),
     dislikedIds: store.ids("dislike"),
-  }, store.savedFilms());
+  }, savedFilms);
   return { mode: catalog.mode, channels, needsSetup: false };
 }
 
@@ -102,11 +114,14 @@ export async function importLetterboxd(store: Store, catalog: Catalog, zip: Buff
   const parsed = parseLetterboxdZip(zip);
   const entries = parsed.watched.slice(0, MAX_IMPORT);
   const seedKeys = new Set(parsed.seeds.map((s) => `${s.title}|${s.year}`));
+  const importedSeeds = new Set(store.marked("seed").filter((r) => r.source === "letterboxd").map((r) => r.film.id));
   let seeds = 0;
   const r = await matchEntries(store, catalog, entries, "letterboxd", (hit, e) => {
     const taste = tasteFromHit(hit, e.rating);
     store.mark(taste, "seen", "letterboxd", e.rating);
     if (seedKeys.has(`${e.title}|${e.year}`)) { store.mark(taste, "seed", "letterboxd", e.rating ?? 4); seeds++; }
+    // A film this import once made a seed, now rated lower or unliked, stops being one. Setup seeds stay.
+    else if (importedSeeds.has(hit.id)) store.unmark(hit.id, "seed");
   });
   return { read: parsed.watched.length, matched: r.matched, seeds, unmatched: r.unmatched, truncated: parsed.watched.length > entries.length };
 }

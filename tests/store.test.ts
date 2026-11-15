@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { FIXTURE_FILMS } from "../src/catalog/fixture";
 import { createSample } from "../src/catalog/sample";
-import { buildFeed, importNetflix } from "../src/server/service";
+import { buildFeed, importNetflix, tastesOf } from "../src/server/service";
 import { openDb } from "../src/server/db";
 import { createStore } from "../src/server/store";
 
@@ -43,6 +43,23 @@ describe("store and usage probe", () => {
     s.setPrefs(prefs);
     const feed = await buildFeed(s, createSample());
     expect(feed.channels.some((ch) => ch.id === "saved")).toBe(true);
+  });
+
+  it("counts films marked Already seen in the taste histogram", () => {
+    const s = fresh();
+    s.act(b, "seen");
+    s.act(c, "dismiss");
+    expect(tastesOf(s).map((t) => t.id)).toEqual([b.id]);
+  });
+
+  it("builds Saved from the refreshed catalog, not the stored snapshot", async () => {
+    const s = fresh();
+    s.act({ ...a, providers: [a.providers[0]!] }, "save"); // an old snapshot
+    s.setPrefs({ providers: a.providers, languages: ["en"], subtitles: true });
+    const stale = { ...a, providers: [999_999] };
+    const cat = { ...createSample(), async film(id: number) { return id === a.id ? stale : null; }, async pool() { return []; } };
+    const feed = await buildFeed(s, cat);
+    expect(feed.channels.some((ch) => ch.id === "saved")).toBe(false); // the cache says it left the chosen services
   });
 
   it("asks about yesterday once: not when logged, not when dismissed", () => {

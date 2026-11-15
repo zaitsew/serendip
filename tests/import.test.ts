@@ -4,6 +4,10 @@ import { pickMatch } from "../src/core/match";
 import { parseCsv } from "../src/import/csv";
 import { looksLikeEpisode, parseLetterboxd, parseLetterboxdZip, parseNetflix } from "../src/import/parse";
 import { readZip } from "../src/import/zip";
+import { createSample } from "../src/catalog/sample";
+import { openDb } from "../src/server/db";
+import { importLetterboxd } from "../src/server/service";
+import { createStore } from "../src/server/store";
 
 /** Builds a ZIP in memory: entries are stored or deflated. */
 function makeZip(files: Record<string, string>, deflate = false): Buffer {
@@ -79,6 +83,19 @@ describe("letterboxd", () => {
   it("finds the files inside a folder", () => {
     const p = parseLetterboxd(new Map([["letterboxd-export/ratings.csv", Buffer.from(RATINGS)]]));
     expect(p.seeds.map((s) => s.title)).toEqual(["Arrival"]);
+  });
+});
+
+describe("letterboxd re-import", () => {
+  const zipWith = (rating: string) => makeZip({ "watched.csv": "Date,Name,Year,Letterboxd URI\n2020-01-01,Arrival,2016,x\n", "ratings.csv": `Date,Name,Year,Letterboxd URI,Rating\n2020-01-01,Arrival,2016,x,${rating}\n` });
+  it("revokes a seed when the new export rates the film lower, and keeps setup seeds", async () => {
+    const store = createStore(openDb(":memory:"));
+    const cat = createSample();
+    await importLetterboxd(store, cat, zipWith("5"));
+    expect(store.ids("seed").size).toBe(1);
+    await importLetterboxd(store, cat, zipWith("2"));
+    expect(store.ids("seed").size).toBe(0);
+    expect(store.ids("seen").size).toBe(1);
   });
 });
 
