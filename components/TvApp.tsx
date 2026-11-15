@@ -249,6 +249,24 @@ export function TvApp({ variant }: { variant: "a" | "b" }) {
     if (latest.current.state.sheet !== null) return;
     input({ type: "swipe", dir: Math.abs(dy) >= Math.abs(dx) ? (dy < 0 ? "up" : "down") : dx < 0 ? "left" : "right" });
   };
+  // Keep keyboard focus on the player's parent element. When a tap or the embed itself moves focus into the
+  // iframe (window blur with the iframe active), take it back so Escape / GoBack still reach our handler.
+  const playerEl = useRef<HTMLDivElement | null>(null);
+  const keepPlayerFocus = useCallback((el: HTMLDivElement | null) => {
+    playerEl.current = el;
+    el?.focus();
+  }, []);
+  useEffect(() => {
+    if (!playing) return;
+    const reclaim = () => {
+      setTimeout(() => {
+        const el = playerEl.current;
+        if (el && document.activeElement instanceof HTMLIFrameElement) el.focus();
+      }, 0);
+    };
+    window.addEventListener("blur", reclaim);
+    return () => window.removeEventListener("blur", reclaim);
+  }, [playing]);
   const onClick = (e: React.MouseEvent) => {
     if (swiped.current) { swiped.current = false; return; }
     if ((e.target as HTMLElement).closest(".sheet, .prompt, .player")) return;
@@ -298,8 +316,9 @@ export function TvApp({ variant }: { variant: "a" | "b" }) {
       {notice ? <div className="toast" role="alert">{notice}</div> : null}
 
       {playing ? (
-        <div className="player" role="dialog" aria-label="Video player">
-          <iframe src={detourEmbed(playing, "watch")} allow="autoplay; encrypted-media; fullscreen" allowFullScreen title="Detour video" ref={(el) => el?.focus()} />
+        <div className="player" role="dialog" aria-label="Video player" tabIndex={0} ref={keepPlayerFocus}>
+          {/* Focus stays on the parent: a focused iframe swallows the remote's keys and Back could not close the player. */}
+          <iframe src={detourEmbed(playing, "watch")} allow="autoplay; encrypted-media; fullscreen" allowFullScreen title="Detour video" tabIndex={-1} />
           <button className="btn player-close" type="button" onClick={(e) => { e.stopPropagation(); setPlaying(null); }}>Back to the channels</button>
         </div>
       ) : null}

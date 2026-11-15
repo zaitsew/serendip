@@ -99,6 +99,7 @@ describe("detour ranking", () => {
     const w = detourEmbed("dQw4w9WgXcQ", "watch");
     expect(w).toContain("autoplay=1");
     expect(w).not.toContain("mute=1");
+    expect(w).toContain("disablekb=1"); // the embed must not capture the remote's keys
   });
 });
 

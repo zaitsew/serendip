@@ -212,7 +212,7 @@ const safeId = (id: string) => encodeURIComponent(id);
 /** youtube-nocookie embed. Muted autoplay preview while zapping, sound and controls once you pressed Watch. */
 export function detourEmbed(videoId: string, mode: "preview" | "watch"): string {
   const id = safeId(videoId);
-  if (mode === "watch") return `https://www.youtube-nocookie.com/embed/${id}?autoplay=1&controls=1&rel=0&playsinline=1&modestbranding=1`;
+  if (mode === "watch") return `https://www.youtube-nocookie.com/embed/${id}?autoplay=1&controls=1&rel=0&playsinline=1&modestbranding=1&disablekb=1`;
   return `https://www.youtube-nocookie.com/embed/${id}?autoplay=1&mute=1&controls=0&rel=0&playsinline=1&loop=1&playlist=${id}&modestbranding=1&start=${previewStart(videoId)}`;
 }
 
