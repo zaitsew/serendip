@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { pickMatch } from "../src/core/match";
+import { createSample } from "../src/catalog/sample";
 import { createTmdb, filmFromDetail, trailerKey, CACHE_TTL_MS } from "../src/catalog/tmdb";
 import { openDb } from "../src/server/db";
 
@@ -22,7 +24,26 @@ describe("tmdb client", () => {
     expect(calls).toBe(before); // served from the cache
     t += CACHE_TTL_MS + 1;
     await c.search("Arrival");
-    expect(calls).toBe(before + 1);
+    expect(calls).toBe(before + 2); // the English and the Spanish search
+  });
+
+  it("finds a film by its Spanish title and still works when the Spanish search fails", async () => {
+    const f = (async (u: string) => {
+      const url = String(u);
+      if (url.includes("/genre/")) return json({ genres: [] });
+      if (url.includes("language=es-ES")) return json({ results: [{ id: 550, title: "El club de la lucha", original_title: "Fight Club", release_date: "1999-10-15", popularity: 50 }] });
+      return json({ results: [] });
+    }) as unknown as typeof fetch;
+    const c = createTmdb({ token: "t", db: openDb(":memory:"), fetch: f });
+    const hits = await c.search("El club de la lucha", 1999);
+    expect(pickMatch("El club de la lucha", 1999, hits)?.id).toBe(550);
+    const broken = (async (u: string) => (String(u).includes("es-ES") ? new Response("no", { status: 500 }) : String(u).includes("/genre/") ? json({ genres: [] }) : json({ results: [{ id: 1, title: "Arrival", release_date: "2016-01-01" }] }))) as unknown as typeof fetch;
+    expect((await createTmdb({ token: "t", db: openDb(":memory:"), fetch: broken }).search("Arrival")).map((h) => h.id)).toEqual([1]);
+  });
+
+  it("sample search folds punctuation on both sides", async () => {
+    const cat = createSample();
+    for (const q of ["Pan's Labyrinth", "Pans Labyrinth", "pan’s labyrinth"]) expect((await cat.search(q)).map((h) => h.title)).toContain("Pan's Labyrinth");
   });
 
   it("serves a stale entry when TMDB fails, and errors when there is none", async () => {

@@ -4,17 +4,19 @@ export interface Candidate {
   id: number;
   title: string;
   originalTitle?: string;
+  /** The title in the person's own language (Spanish for a Spanish Netflix export), when we know it. */
+  localizedTitle?: string;
   year: number | null;
   popularity?: number;
 }
 
 const norm = (s: string) =>
-  s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().replace(/&/g, "and").replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+  s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().replace(/['’]/g, "").replace(/&/g, "and").replace(/[^\p{L}\p{N}]+/gu, " ").trim();
 
 /** The best result for a title and optional year, or null. Titles must match exactly after normalising. */
 export function pickMatch(title: string, year: number | null, results: Candidate[]): Candidate | null {
   const want = norm(title);
-  const hits = results.filter((r) => norm(r.title) === want || (r.originalTitle ? norm(r.originalTitle) === want : false));
+  const hits = results.filter((r) => norm(r.title) === want || (r.originalTitle ? norm(r.originalTitle) === want : false) || (r.localizedTitle ? norm(r.localizedTitle) === want : false));
   if (hits.length === 0) return null;
   if (year != null) {
     const close = hits.filter((r) => r.year != null && Math.abs(r.year - year) <= 1);

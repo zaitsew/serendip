@@ -155,14 +155,19 @@ export function createTmdb(opts: TmdbOptions): Catalog & { cacheHits: number; ca
       }
     },
 
+    /** Searches in English and in Spanish, so a translated Netflix title ("El club de la lucha") still finds its film. */
     async search(query: string, year?: number | null): Promise<SearchHit[]> {
       const g = await genres();
-      const r = await get<{ results: Array<Json & { id: number; title: string; original_title?: string; release_date?: string; popularity?: number; genre_ids?: number[]; poster_path?: string | null }> }>(
-        "/search/movie", { query, language: "en-US", include_adult: "false", ...(year ? { year } : {}) });
-      return r.results.slice(0, 10).map((m) => ({
+      type Row = Json & { id: number; title: string; original_title?: string; release_date?: string; popularity?: number; genre_ids?: number[]; poster_path?: string | null };
+      const ask = (language: string) => get<{ results: Row[] }>("/search/movie", { query, language, include_adult: "false", ...(year ? { year } : {}) });
+      const [en, es] = await Promise.all([ask("en-US"), ask("es-ES").catch(() => ({ results: [] as Row[] }))]);
+      const localized = new Map(es.results.map((m) => [m.id, m.title]));
+      const rows = [...en.results.slice(0, 10), ...es.results.slice(0, 10).filter((m) => !en.results.slice(0, 10).some((e) => e.id === m.id))];
+      return rows.map((m) => ({
         id: m.id,
         title: m.title,
         originalTitle: m.original_title,
+        localizedTitle: localized.get(m.id),
         year: yearOf(m.release_date),
         popularity: m.popularity,
         genres: (m.genre_ids ?? []).map((i) => g.get(i)).filter((x): x is string => !!x),
