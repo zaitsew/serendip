@@ -46,15 +46,20 @@ No scraping. A charge for any source is a POLICY §11 question first.
 
 Serves: "scrolling TV channels with films to find good ones".
 
-- `/tv`: one film per screen, remote-friendly. Left/right zaps, OK opens, up saves, down
-  says "seen / not for me". The trailer plays at once, like landing on a channel mid-film.
+- `/tv`: one film per screen, remote-friendly. Up/Down zap to the next or previous film (like
+  channel buttons), Left/Right switch channel, 1 to 9 jump to a channel, OK opens the actions
+  (Watch on the service, Save, Seen, Not for me), Back closes. On a phone: swipe up or down zaps,
+  tap opens the actions. The trailer plays at once, muted, like landing on a channel mid-film.
+  Two layouts for the owner to review on the device: `/tv?v=a` (full-bleed trailer, channel strip
+  on top) and `/tv?v=b` (trailer left, info right, channel list at the bottom).
 - Channels: "Tonight", "Outside your usual" and a few themed ones (country, decade, genre).
 - Inputs: your services in Spain, languages, 15 loved films or a Letterboxd ZIP, the
   Netflix CSV as already seen.
 - Ranking is deterministic: available tonight on your services, not seen, skip the most
   popular titles, a fixed share of slots outside your usual cluster. No LLM in S1.
-- Every pick shows one line on why it is here.
-- An evening log: what you watched, from where (Serendip, Netflix, TV), and a 1–5 score.
+- Every pick shows one line on why it is here, from a template.
+- An evening log at `/log`: what you watched, from where (Serendip, Netflix home, TV zapping,
+  other), a 1–5 score and minutes to choose. `/tv` asks about yesterday if it has no entry.
 - Works without a TMDB key on a labelled fixture catalog, so the screen can be tried.
 
 ### S2 — The YouTube Detour lane
