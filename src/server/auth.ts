@@ -6,8 +6,8 @@ import { createHash, createHmac, timingSafeEqual } from "node:crypto";
  *  - API clients send `Authorization: Bearer <key>`.
  *  - No key set: nothing gets in. There is no localhost exemption, because the dev server is reachable
  *    from the Wi-Fi when you run it with `-H 0.0.0.0` for the TV.
- *  - Wrong keys are counted per client and checked BEFORE the credential, so a locked-out client is
- *    refused even with the right key.
+ *  - Wrong keys are counted per client. A valid key or session always passes; the lockout only refuses
+ *    requests that failed to authenticate, so one client's failures cannot block another's valid ones.
  */
 
 export const COOKIE_NAME = "serendip_session";
@@ -117,17 +117,28 @@ export const lockout = () => (g.__serendipLockout ??= createLockout({ perKey: 10
 /** The client address. Forwarded headers count only behind a proxy you control (SERENDIP_TRUST_PROXY=1). */
 export function clientIp(headers: Headers, env: Env = process.env): string {
   if (env.SERENDIP_TRUST_PROXY === "1") return headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  // Without a trusted proxy a forwarded header is client-supplied and would let a guesser pick a fresh
+  // bucket each time. The socket address is not visible to route handlers, so failures share one bucket.
   return "shared";
+}
+
+/**
+ * The throttle for a request that did NOT authenticate: a 429 when its client is locked out, otherwise
+ * `null` after counting a wrong bearer key against that client. A request that authenticates never gets
+ * here, so other people's wrong keys can never lock the owner out.
+ */
+export function throttleFailure(headers: Headers, presented: boolean): Response | null {
+  const ip = clientIp(headers);
+  if (ownerKey() && lockout().locked(ip)) return json(429, "Too many wrong keys. Wait ten minutes.", { "Retry-After": "600" });
+  if (presented) lockout().fail(ip);
+  return null;
 }
 
 /** `null` when the request is the owner's; otherwise the 401/429/503 response to return. */
 export function requireOwner(request: Request): Response | null {
-  const ip = clientIp(request.headers);
-  if (ownerKey() && lockout().locked(ip)) return json(429, "Too many wrong keys. Wait ten minutes.", { "Retry-After": "600" });
   const r = authenticate({ cookie: request.headers.get("cookie"), authorization: request.headers.get("authorization") });
   if (r.ok) return null;
-  if (r.presented) lockout().fail(ip);
-  return json(r.status, r.error);
+  return throttleFailure(request.headers, r.presented) ?? json(r.status, r.error);
 }
 
 function json(status: number, error: string, headers?: Record<string, string>): Response {

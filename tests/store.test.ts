@@ -34,6 +34,17 @@ describe("store and usage probe", () => {
     expect(s.seenIds().has(a.id)).toBe(true);
   });
 
+  it("never downgrades a stored Film to a Taste, so Saved still renders after an import", async () => {
+    const s = fresh();
+    s.act(a, "save");
+    s.mark({ id: a.id, title: a.title, year: a.year, genres: a.genres, country: a.country, rating: 4 }, "seen", "letterboxd", 4);
+    expect(s.savedFilms()[0]?.providers).toEqual(a.providers);
+    const prefs = { providers: a.providers, languages: ["en"], subtitles: true };
+    s.setPrefs(prefs);
+    const feed = await buildFeed(s, createSample());
+    expect(feed.channels.some((ch) => ch.id === "saved")).toBe(true);
+  });
+
   it("asks about yesterday once: not when logged, not when dismissed", () => {
     const s = fresh();
     expect(s.hasEvening("2026-11-14")).toBe(false);

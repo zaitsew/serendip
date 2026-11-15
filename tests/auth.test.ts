@@ -1,9 +1,11 @@
-import { describe, expect, it } from "vitest";
-import { authenticate, COOKIE_NAME, createLockout, safeNextPath, sessionValue } from "../src/server/auth";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { authenticate, COOKIE_NAME, createLockout, lockout, requireOwner, safeNextPath, sessionValue } from "../src/server/auth";
 import { watchUrl, trailerEmbed } from "../src/core/watch";
 import { formatRuntime } from "../src/core/why";
 
 const env = { SERENDIP_OWNER_KEY: "secret-key" };
+
+afterEach(() => { vi.unstubAllEnvs(); lockout().reset(); });
 
 describe("owner key", () => {
   it("refuses everything when no key is set", () => {
@@ -20,6 +22,24 @@ describe("owner key", () => {
     for (let i = 0; i < 3; i++) l.fail("ip");
     expect(l.locked("ip")).toBe(true);
     expect(l.locked("other")).toBe(false);
+  });
+  it("never blocks a valid key or session because of other clients' wrong keys", () => {
+    vi.stubEnv("SERENDIP_OWNER_KEY", "secret-key");
+    lockout().reset();
+    const req = (h: Record<string, string>) => new Request("http://x/api/state", { headers: h });
+    for (let i = 0; i < 12; i++) expect(requireOwner(req({ authorization: `Bearer wrong-${i}` }))?.status).toBe(i < 10 ? 401 : 429);
+    expect(requireOwner(req({ authorization: "Bearer wrong-again" }))?.status).toBe(429);
+    expect(requireOwner(req({ authorization: "Bearer secret-key" }))).toBeNull();
+    expect(requireOwner(req({ cookie: `${COOKIE_NAME}=${sessionValue("secret-key")}` }))).toBeNull();
+  });
+  it("counts a client's wrong keys separately when a trusted proxy names the client", () => {
+    vi.stubEnv("SERENDIP_OWNER_KEY", "secret-key");
+    vi.stubEnv("SERENDIP_TRUST_PROXY", "1");
+    lockout().reset();
+    const req = (ip: string, key: string) => new Request("http://x/api/state", { headers: { authorization: `Bearer ${key}`, "x-forwarded-for": ip } });
+    for (let i = 0; i < 10; i++) requireOwner(req("1.1.1.1", "bad"));
+    expect(requireOwner(req("1.1.1.1", "bad"))?.status).toBe(429);
+    expect(requireOwner(req("2.2.2.2", "bad"))?.status).toBe(401);
   });
   it("keeps next paths on this site", () => {
     expect(safeNextPath("/tv?v=b")).toBe("/tv?v=b");

@@ -50,6 +50,17 @@ describe("zip", () => {
       expect(m.get("likes/films.csv")?.toString()).toBe("x,y");
     }
   });
+  it("reads only the entries it wants and skips the rest", () => {
+    const m = readZip(makeZip({ "a.csv": "keep", "junk.bin": "x".repeat(1000) }, true), { want: (n) => n === "a.csv", maxTotal: 100 });
+    expect([...m.keys()]).toEqual(["a.csv"]);
+  });
+  it("refuses too many entries and too much expanded data", () => {
+    const many = Object.fromEntries(Array.from({ length: 30 }, (_, i) => [`f${i}.csv`, "a"]));
+    expect(() => readZip(makeZip(many), { maxEntries: 10 })).toThrow(/too many entries/);
+    const big = makeZip({ "a.csv": "x".repeat(60_000), "b.csv": "y".repeat(60_000) }, true);
+    expect(() => readZip(big, { maxTotal: 100_000 })).toThrow(/too much data/);
+    expect(() => readZip(makeZip({ "a.csv": "x".repeat(60_000) }, true), { maxEntry: 1000 })).toThrow(/too large/);
+  });
   it("rejects a non-zip", () => {
     expect(() => readZip(Buffer.from("not a zip file at all, really not"))).toThrow(/ZIP/);
   });

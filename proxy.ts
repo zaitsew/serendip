@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { authenticate } from "./src/server/auth";
+import { authenticate, throttleFailure } from "./src/server/auth";
 
 /**
  * Pages need the owner's session. /api routes check the key themselves (they answer JSON, not a
@@ -9,6 +9,9 @@ export function proxy(request: NextRequest) {
   const h = request.headers;
   const auth = authenticate({ cookie: h.get("cookie"), authorization: h.get("authorization") });
   if (auth.ok) return undefined;
+  // Page requests count wrong bearer keys against the same per-client throttle as the API.
+  const throttled = throttleFailure(h, auth.presented);
+  if (throttled) return throttled;
 
   const { pathname, search } = request.nextUrl;
   const proto = h.get("x-forwarded-proto")?.split(",")[0]?.trim() || request.nextUrl.protocol.replace(":", "");

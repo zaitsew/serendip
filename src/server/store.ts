@@ -27,7 +27,13 @@ export function createStore(d: DatabaseSync = defaultDb()) {
   const getKv = (key: string): string | null => (d.prepare("SELECT value FROM kv WHERE key = ?").get(key) as { value: string } | undefined)?.value ?? null;
   const setKv = (key: string, value: string) => void d.prepare("INSERT INTO kv (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(key, value);
 
-  const filmSnapshot = (f: Film | Taste) => void d.prepare("INSERT INTO films (id, json) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET json = excluded.json").run(f.id, JSON.stringify(f));
+  /** A full Film replaces any snapshot. A Taste never replaces a stored Film: it only fills an empty slot. */
+  const filmSnapshot = (f: Film | Taste) => {
+    const sql = "recommendations" in f
+      ? "INSERT INTO films (id, json) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET json = excluded.json"
+      : "INSERT INTO films (id, json) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET json = excluded.json WHERE json_extract(films.json, '$.recommendations') IS NULL";
+    d.prepare(sql).run(f.id, JSON.stringify(f));
+  };
 
   return {
     getPrefs(): Prefs {
@@ -80,7 +86,7 @@ export function createStore(d: DatabaseSync = defaultDb()) {
     },
     savedFilms(): Film[] {
       const rows = d.prepare("SELECT f.json AS json FROM actions a JOIN films f ON f.id = a.film_id WHERE a.action = 'save' ORDER BY a.at DESC").all() as Array<{ json: string }>;
-      return rows.map((r) => JSON.parse(r.json) as Film);
+      return rows.map((r) => JSON.parse(r.json) as Film).filter((f) => Array.isArray(f.providers));
     },
 
     event(type: EventType, filmId: number | null = null, meta: Record<string, string | number> | null = null): void {

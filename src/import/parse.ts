@@ -57,7 +57,8 @@ export function parseLetterboxd(files: Map<string, Buffer>): LetterboxdParsed {
 }
 
 export function parseLetterboxdZip(zip: Buffer): LetterboxdParsed {
-  return parseLetterboxd(readZip(zip));
+  const needed = ["watched.csv", "ratings.csv", "likes/films.csv"];
+  return parseLetterboxd(readZip(zip, { want: (name) => needed.some((n) => name === n || name.endsWith(`/${n}`)) }));
 }
 
 /** "Show: Season 2: Episode" (also Spanish "Temporada", Limited Series, Part, Volume, Book). */
