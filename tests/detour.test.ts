@@ -3,7 +3,7 @@ import {
   allowedSearches, cleanFields, DAILY_SEARCH_BUDGET, DAY_MS, DETOUR, detourEmbed, detourWhy, dropReason, filterCandidates, planPlaylistSync, planSearches, quotaDay, score, selectDetour, topChannels,
   type Candidate, type DetourContext,
 } from "../src/core/detour";
-import { refreshDetour, type DetourDeps } from "../src/server/detour";
+import { refreshDetour, RETRY_AFTER_MS, type DetourDeps } from "../src/server/detour";
 import { openDb } from "../src/server/db";
 import { createStore } from "../src/server/store";
 import { encryptSecret } from "../src/server/crypto";
@@ -275,5 +275,45 @@ describe("refreshDetour enforces the daily budget", () => {
     expect(items).toEqual([]);
     expect(s.yt.getPicks()?.note).toMatch(/No video passed/);
     void OAuthError;
+  });
+
+  it("retries a failed playlist sync without any new search, for fresh picks and for an empty budget", async () => {
+    const s = createStore(openDb(":memory:"));
+    s.yt.setFields(["physics"]);
+    s.yt.setSealedToken(encryptSecret("rt", "owner-key"));
+    let items: PlaylistItem[] = [];
+    let down = true;
+    const playlist: PlaylistClient = {
+      async getPlaylist() { return { privacy: "private" }; },
+      async createPlaylist() { if (down) throw new OAuthError("unavailable", "The playlist service is down."); return "PL1"; },
+      async listItems() { return [...items]; },
+      async deleteItem(id) { items = items.filter((i) => i.itemId !== id); },
+      async insertItem(_p, videoId) { items.push({ itemId: `n${items.length}`, videoId }); },
+    };
+    const tokenFetch = (async () => new Response(JSON.stringify({ access_token: "at" }), { status: 200 })) as unknown as typeof fetch;
+    const { yt, calls } = fakeYt();
+    let now = NOW;
+    const d = (): DetourDeps => ({ yt, oauth: { clientId: "c", clientSecret: "s", redirectUri: "http://localhost:3000/cb" }, ownerKey: "owner-key", fetch: tokenFetch, now: () => now, playlist: () => playlist });
+    // The search works, the playlist write fails.
+    expect((await refreshDetour(s, d(), { force: true })).playlist).toBe("failed");
+    const searches = calls.search;
+    // Inside the back-off window a plain load does not hammer the service.
+    now += 60_000;
+    down = false;
+    expect((await refreshDetour(s, d())).playlist).toBe("failed");
+    // After the window a plain load retries the sync only: fresh picks, zero searches.
+    now += RETRY_AFTER_MS;
+    const r = await refreshDetour(s, d());
+    expect(r).toMatchObject({ status: "fresh", searchCalls: 0, playlist: "synced" });
+    expect(items.length).toBe(s.yt.getPicks()!.picks.length);
+    expect(calls.search).toBe(searches);
+    // Budget spent + failed sync: the manual refresh still retries the sync and does not search.
+    s.yt.setPlaylistStatus({ at: now, ok: false, added: 0, removed: 0, error: "x", playlistId: "PL1", picksBuiltAt: 0 });
+    items = [];
+    s.yt.addUsage(quotaDay(now), DAILY_SEARCH_BUDGET, 0);
+    const b = await refreshDetour(s, d(), { force: true });
+    expect(b).toMatchObject({ status: "budget", playlist: "synced" });
+    expect(items.length).toBe(s.yt.getPicks()!.picks.length);
+    expect(calls.search).toBe(searches);
   });
 });

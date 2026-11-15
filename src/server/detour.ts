@@ -163,14 +163,14 @@ export async function refreshDetour(store: Store, deps: DetourDeps, opts: { forc
   const fields = store.yt.getFields();
   if (fields.length === 0) return summary("no_fields", 0, 0, "Name a field first.");
   if (!opts.force) {
-    if (existing?.day === day) return summary("fresh", existing.picks.length, 0, null);
+    if (existing?.day === day) return summary("fresh", existing.picks.length, 0, null, await resyncPlaylist(store, deps, false));
     const attempt = store.yt.getAttempt();
     if (attempt?.error && now - attempt.at < RETRY_AFTER_MS) return summary("waiting", existing?.picks.length ?? 0, 0, attempt.error);
   }
 
   const used = store.yt.searchesToday(day);
   if (DAILY_SEARCH_BUDGET - used <= 0) {
-    return summary("budget", existing?.picks.length ?? 0, 0, `The ${DAILY_SEARCH_BUDGET} searches for today are used. The quota resets at midnight Pacific.`);
+    return summary("budget", existing?.picks.length ?? 0, 0, `The ${DAILY_SEARCH_BUDGET} searches for today are used. The quota resets at midnight Pacific.`, await resyncPlaylist(store, deps, !!opts.force));
   }
   const prefs = store.getPrefs();
   const lang = language(prefs.languages[0]);
@@ -275,7 +275,8 @@ export async function syncToYoutube(store: Store, deps: DetourDeps, videoIds: st
   if (!sealed || !deps.oauth || !deps.ownerKey) return "off";
   if (videoIds.length === 0 && !store.yt.getPlaylistId()) return "skipped"; // nothing to empty, nothing to create
   const at = deps.now();
-  const fail = (error: string) => { store.yt.setPlaylistStatus({ at, ok: false, added: 0, removed: 0, error, playlistId: store.yt.getPlaylistId() }); return "failed" as const; };
+  const picksBuiltAt = store.yt.getPicks()?.builtAt ?? null;
+  const fail = (error: string) => { store.yt.setPlaylistStatus({ at, ok: false, added: 0, removed: 0, error, playlistId: store.yt.getPlaylistId(), picksBuiltAt }); return "failed" as const; };
   const refresh = decryptSecret(sealed, deps.ownerKey);
   if (!refresh) { store.yt.clearToken(); return fail("The stored YouTube token cannot be read (the owner key changed). Connect YouTube again."); }
   try {
@@ -283,7 +284,7 @@ export async function syncToYoutube(store: Store, deps: DetourDeps, videoIds: st
     const client = deps.playlist ? deps.playlist(token) : createPlaylistClient(deps.fetch, token);
     const r = await syncPlaylist(client, store, videoIds);
     store.yt.addUsage(quotaDay(at), 0, (r.added + r.removed) * PLAYLIST_WRITE_COST + 2 * LIST_COST);
-    store.yt.setPlaylistStatus({ at, ok: true, added: r.added, removed: r.removed, error: null, playlistId: r.playlistId });
+    store.yt.setPlaylistStatus({ at, ok: true, added: r.added, removed: r.removed, error: null, playlistId: r.playlistId, picksBuiltAt });
     return "synced";
   } catch (e) {
     if (e instanceof OAuthError && e.code === "invalid_grant") {
@@ -292,6 +293,21 @@ export async function syncToYoutube(store: Store, deps: DetourDeps, videoIds: st
     }
     return fail(e instanceof OAuthError ? e.message : "The playlist update failed.");
   }
+}
+
+/**
+ * Retry the playlist sync for picks that already exist, without any search. Needed when the picks are
+ * fresh (or the search budget is spent) but the last sync failed or never ran for these picks.
+ * A failed sync is not retried inside RETRY_AFTER_MS unless `force` is set (the manual refresh).
+ */
+export async function resyncPlaylist(store: Store, deps: DetourDeps, force: boolean): Promise<RefreshResult["playlist"]> {
+  if (!isConnected(store)) return "off";
+  const picks = store.yt.getPicks();
+  if (!picks) return "off";
+  const status = store.yt.getPlaylistStatus();
+  if (status?.ok && status.picksBuiltAt === picks.builtAt) return "synced";
+  if (!force && status && !status.ok && deps.now() - status.at < RETRY_AFTER_MS) return "failed";
+  return syncToYoutube(store, deps, picks.picks.map((p) => p.videoId));
 }
 
 export function beginConnect(store: Store, deps: DetourDeps): string | null {

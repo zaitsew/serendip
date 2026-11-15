@@ -19,7 +19,7 @@ export interface DetourPicks {
   note: string | null;
 }
 
-export interface PlaylistStatus { at: number; ok: boolean; added: number; removed: number; error: string | null; playlistId: string | null }
+export interface PlaylistStatus { at: number; ok: boolean; added: number; removed: number; error: string | null; playlistId: string | null; picksBuiltAt?: number | null }
 
 export interface SavedVideo { videoId: string; title: string | null; channelTitle: string | null; field: string | null }
 
