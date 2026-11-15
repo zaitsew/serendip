@@ -224,4 +224,26 @@ describe("refreshDetour enforces the daily budget", () => {
     expect(s.yt.mutedKeys().has(p.channelId!)).toBe(true);
     expect(s.yt.fieldDismissals()).toEqual({ physics: 1 });
   });
+
+  it("keeps the earlier picks of fields a stopped run never reached", async () => {
+    const s = createStore(openDb(":memory:"));
+    s.yt.setFields(["alpha", "beta"]);
+    const { yt: ok } = fakeYt();
+    await refreshDetour(s, deps(ok, NOW), { force: true });
+    const before = s.yt.getPicks()!.picks;
+    expect(before.some((p) => p.field === "beta")).toBe(true);
+    const { YoutubeError } = await import("../src/youtube/api");
+    // The next day: alpha answers, then the quota runs out before beta is reached.
+    let n = 0;
+    const flaky: YoutubeClient = {
+      async search(o) { if (++n > 1) throw new YoutubeError(403, "quotaExceeded", "quota"); return ok.search(o); },
+      videos: ok.videos,
+    };
+    const r = await refreshDetour(s, deps(flaky, NOW + DAY_MS), { force: true });
+    expect(r.status).toBe("built");
+    const after = s.yt.getPicks()!.picks;
+    const beta = (list: typeof after) => list.filter((p) => p.field === "beta").map((p) => p.videoId).sort();
+    expect(beta(after)).toEqual(beta(before)); // beta kept as it was
+    expect(after.filter((p) => p.field === "alpha").map((p) => p.videoId)).not.toEqual(before.filter((p) => p.field === "alpha").map((p) => p.videoId));
+  });
 });

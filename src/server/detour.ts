@@ -182,6 +182,7 @@ export async function refreshDetour(store: Store, deps: DetourDeps, opts: { forc
   let calls = 0;
   let note: string | null = null;
   let failed = false;
+  const searchedOk = new Set<string>(); // fields with at least one search that came back
   for (const task of tasks) {
     if (store.yt.searchesToday(day) >= DAILY_SEARCH_BUDGET) break;
     store.yt.addUsage(day, 1, SEARCH_COST); // counted before the call: an error never frees budget
@@ -190,6 +191,7 @@ export async function refreshDetour(store: Store, deps: DetourDeps, opts: { forc
       for (const hit of await deps.yt.search({ q: task.field, duration: task.duration, language: lang, publishedAfter })) {
         if (!hits.has(hit.videoId) && !ctx.watched.has(hit.videoId)) hits.set(hit.videoId, { hit, field: task.field });
       }
+      searchedOk.add(task.field);
     } catch (e) {
       failed = true;
       note = e instanceof YoutubeError ? (e.quota ? "YouTube says the daily quota is used up." : e.message) : "Search failed.";
@@ -214,8 +216,9 @@ export async function refreshDetour(store: Store, deps: DetourDeps, opts: { forc
     note = note ?? (e instanceof YoutubeError ? e.message : "Could not read video details.");
   }
 
-  // Keep today's earlier picks for fields this run did not search (a partial run after the budget cut it short).
-  const carried: Candidate[] = existing && existing.day === day ? existing.picks.filter((p) => !tasks.some((t) => t.field === p.field)).map((p) => withoutScore(p)) : [];
+  // Keep the earlier picks of every field this run did not get an answer for (a quota error, a failed
+  // search, or a budget that ran out before the field was reached). Fields that were searched are replaced.
+  const carried: Candidate[] = existing ? existing.picks.filter((p) => fields.includes(p.field) && !searchedOk.has(p.field)).map((p) => withoutScore(p)) : [];
   const picks = selectDetour([...candidates, ...carried], ctx);
 
   if (failed && picks.length === 0 && candidates.length === 0) {
