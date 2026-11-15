@@ -3,10 +3,13 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { countryName, formatRuntime } from "../src/core/why";
+import { detourEmbed } from "../src/core/detour";
 import { trailerEmbed } from "../src/core/watch";
 import { initialZap, SHEET_ACTIONS, zap, type SheetAction, type ZapInput, type ZapState } from "../src/core/zap";
 
 interface FeedPick {
+  /** Stable identity across channels: "f:<tmdb id>" for a film, "v:<video id>" for a Detour video. */
+  key: string;
   id: number;
   title: string;
   year: number | null;
@@ -22,15 +25,17 @@ interface FeedPick {
   outside: boolean;
   service: string;
   watchUrl: string;
+  /** Present on Detour picks. `videoId` is null on the labelled sample cards, which never play. */
+  video?: { videoId: string | null; channel: string; field: string; placeholder: boolean };
 }
 interface FeedChannel { id: string; name: string; blurb: string; picks: FeedPick[] }
 interface Feed { mode: "tmdb" | "sample"; needsSetup: boolean; channels: FeedChannel[] }
 
 const LABEL: Record<SheetAction, (p: FeedPick) => string> = {
-  watch: (p) => `Watch on ${p.service}`,
+  watch: (p) => (p.video ? (p.video.placeholder ? "Watch (sample, does not play)" : "Watch here, full screen") : `Watch on ${p.service}`),
   save: () => "Save for later",
   seen: () => "Already seen",
-  dismiss: () => "Not for me",
+  dismiss: (p) => (p.video ? "Not for me (mute channel 90 days)" : "Not for me"),
 };
 
 const post = (url: string, body: unknown) => fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }).catch(() => undefined);
@@ -55,16 +60,18 @@ function device(): "tv" | "touch" | "desktop" {
 function Media({ pick, trailerOn }: { pick: FeedPick; trailerOn: boolean }) {
   const h = hue(pick.title);
   const image = pick.backdrop ?? pick.poster;
+  const vid = pick.video?.videoId ?? null;
   return (
     <div className="media" aria-hidden="true">
       {image ? (
         <div className="media-img" style={{ backgroundImage: `url(${image})` }} />
       ) : (
         <div className="media-card" style={{ background: `linear-gradient(135deg, hsl(${h} 55% 24%), hsl(${(h + 60) % 360} 60% 10%))` }}>
-          <span>{pick.genres[0] ?? ""}</span>
+          <span>{pick.video?.placeholder ? "Sample" : (pick.genres[0] ?? "")}</span>
         </div>
       )}
-      {trailerOn && pick.trailerKey ? <iframe key={pick.id} src={trailerEmbed(pick.trailerKey, pick.id)} allow="autoplay; encrypted-media" title="" tabIndex={-1} /> : null}
+      {trailerOn && vid ? <iframe key={pick.key} src={detourEmbed(vid, "preview")} allow="autoplay; encrypted-media" title="" tabIndex={-1} /> : null}
+      {trailerOn && !vid && pick.trailerKey ? <iframe key={pick.key} src={trailerEmbed(pick.trailerKey, pick.id)} allow="autoplay; encrypted-media" title="" tabIndex={-1} /> : null}
     </div>
   );
 }
@@ -92,13 +99,14 @@ export function TvApp({ variant }: { variant: "a" | "b" }) {
   const [channels, setChannels] = useState<FeedChannel[]>([]);
   const [state, dispatchZap] = useReducer((s: ZapState, i: ZapInput) => zap(s, i).state, initialZap([]));
   const router = useRouter();
-  const [trailerFor, setTrailerFor] = useState<number | null>(null);
+  const [trailerFor, setTrailerFor] = useState<string | null>(null);
+  const [playing, setPlaying] = useState<string | null>(null); // video id shown full screen, with sound
   const [askDay, setAskDay] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const shown = useRef(new Set<number>());
-  const latest = useRef({ state, channels, askDay });
+  const shown = useRef(new Set<string>());
+  const latest = useRef({ state, channels, askDay, playing });
   useEffect(() => {
-    latest.current = { state, channels, askDay };
+    latest.current = { state, channels, askDay, playing };
   });
 
   useEffect(() => {
@@ -128,19 +136,42 @@ export function TvApp({ variant }: { variant: "a" | "b" }) {
   // Count a film as shown once per session, and start its trailer after you stop zapping.
   useEffect(() => {
     if (!pick) return;
-    if (!shown.current.has(pick.id)) {
-      shown.current.add(pick.id);
-      post("/api/event", { type: "pick_shown", filmId: pick.id });
+    if (!shown.current.has(pick.key)) {
+      shown.current.add(pick.key);
+      if (pick.video) { if (pick.video.videoId) post("/api/event", { type: "detour_shown", videoId: pick.video.videoId }); }
+      else post("/api/event", { type: "pick_shown", filmId: pick.id });
     }
-    const id = pick.id;
+    const id = pick.key;
     const t = setTimeout(() => setTrailerFor(id), 400);
     return () => clearTimeout(t);
-  }, [pick?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [pick?.key]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const flash = useCallback((text: string) => {
+    setNotice(text);
+    setTimeout(() => setNotice(null), 4000);
+  }, []);
 
   const run = useCallback(async (action: SheetAction) => {
     const { state: s, channels: chs } = latest.current;
     const p = chs[s.channel]?.picks[s.position[s.channel] ?? 0];
     if (!p) return;
+    if (p.video) {
+      const v = p.video;
+      if (action === "watch") {
+        if (v.videoId) { post("/api/event", { type: "detour_watch", videoId: v.videoId }); setPlaying(v.videoId); } else flash("Sample card: nothing plays. Add YOUTUBE_API_KEY.");
+        return;
+      }
+      // Sample cards have no real id, so there is nothing to store: they just leave the channel.
+      if (v.videoId) {
+        let saved = false;
+        try { saved = (await fetch("/api/detour/action", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ videoId: v.videoId, action }) })).ok; } catch { saved = false; }
+        if (!saved) { flash("Could not save that. The video is still here; try again."); return; }
+      }
+      const at = latest.current.channels.map((c) => c.picks.findIndex((x) => x.key === p.key));
+      setChannels((cs) => cs.map((c) => ({ ...c, picks: c.picks.filter((x) => x.key !== p.key) })));
+      dispatchZap({ type: "removeFilm", indices: at });
+      return;
+    }
     if (action === "watch") {
       // One window.open call: with "noopener" it returns null even when the tab opened, so drop the opener by hand.
       const w = window.open(p.watchUrl, "_blank");
@@ -152,15 +183,14 @@ export function TvApp({ variant }: { variant: "a" | "b" }) {
       ok = (await fetch("/api/action", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ filmId: p.id, action }) })).ok;
     } catch { ok = false; }
     if (!ok) {
-      setNotice("Could not save that. The film is still here; try again.");
-      setTimeout(() => setNotice(null), 4000);
+      flash("Could not save that. The film is still here; try again.");
       return;
     }
     // Saved, seen or not for me: the film leaves every channel it was in, not just this one.
-    const indices = latest.current.channels.map((c) => c.picks.findIndex((x) => x.id === p.id));
-    setChannels((cs) => cs.map((c) => ({ ...c, picks: c.picks.filter((x) => x.id !== p.id) })));
+    const indices = latest.current.channels.map((c) => c.picks.findIndex((x) => x.key === p.key));
+    setChannels((cs) => cs.map((c) => ({ ...c, picks: c.picks.filter((x) => x.key !== p.key) })));
     dispatchZap({ type: "removeFilm", indices });
-  }, []);
+  }, [flash]);
 
   const input = useCallback((i: ZapInput) => {
     const { state: s } = latest.current;
@@ -180,7 +210,12 @@ export function TvApp({ variant }: { variant: "a" | "b" }) {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       // A focused link or button keeps its own Enter and Space (the "Open setup" link on the fallback screens).
       if ((e.key === "Enter" || e.key === " ") && (e.target as HTMLElement | null)?.closest?.("a, button, input, select, textarea")) return;
-      const { askDay: day, state: s } = latest.current;
+      const { askDay: day, state: s, playing: on } = latest.current;
+      if (on) {
+        // The full-screen player owns the keys; Back closes it. Everything else goes to the video.
+        if (/^(Escape|Backspace|GoBack|BrowserBack)$/.test(e.key)) { e.preventDefault(); setPlaying(null); }
+        return;
+      }
       if (day && s.sheet === null) {
         if (e.key === "Enter") { e.preventDefault(); router.push(`/log?day=${day}`); return; }
         if (e.key === "Escape" || e.key === "Backspace" || e.key === "GoBack") { e.preventDefault(); dismissPrompt(); return; }
@@ -214,15 +249,33 @@ export function TvApp({ variant }: { variant: "a" | "b" }) {
     if (latest.current.state.sheet !== null) return;
     input({ type: "swipe", dir: Math.abs(dy) >= Math.abs(dx) ? (dy < 0 ? "up" : "down") : dx < 0 ? "left" : "right" });
   };
+  // Keep keyboard focus on the player's parent element. When a tap or the embed itself moves focus into the
+  // iframe (window blur with the iframe active), take it back so Escape / GoBack still reach our handler.
+  const playerEl = useRef<HTMLDivElement | null>(null);
+  const keepPlayerFocus = useCallback((el: HTMLDivElement | null) => {
+    playerEl.current = el;
+    el?.focus();
+  }, []);
+  useEffect(() => {
+    if (!playing) return;
+    const reclaim = () => {
+      setTimeout(() => {
+        const el = playerEl.current;
+        if (el && document.activeElement instanceof HTMLIFrameElement) el.focus();
+      }, 0);
+    };
+    window.addEventListener("blur", reclaim);
+    return () => window.removeEventListener("blur", reclaim);
+  }, [playing]);
   const onClick = (e: React.MouseEvent) => {
     if (swiped.current) { swiped.current = false; return; }
-    if ((e.target as HTMLElement).closest(".sheet, .prompt")) return;
+    if ((e.target as HTMLElement).closest(".sheet, .prompt, .player")) return;
     input({ type: "tap" });
   };
 
   const meta = useMemo(() => {
     if (!pick) return "";
-    return [pick.year, pick.country ? countryName(pick.country) : null, formatRuntime(pick.runtime), pick.genres[0]].filter(Boolean).join(" · ");
+    return [pick.year, pick.country ? countryName(pick.country) : null, pick.runtime || !pick.video ? formatRuntime(pick.runtime) : null, pick.genres[0]].filter(Boolean).join(" · ");
   }, [pick]);
 
   if (error) return <div className="tv"><div className="tv-state"><p role="alert">{error}</p><a className="btn" href="/setup">Open setup</a></div></div>;
@@ -238,6 +291,7 @@ export function TvApp({ variant }: { variant: "a" | "b" }) {
       <h1 className="tv-title">{pick.title}</h1>
       <p className="tv-line">{pick.line}</p>
       <p className="tv-why">{pick.why}</p>
+      {pick.video?.placeholder ? <p className="tv-sample" role="status">Sample: add YOUTUBE_API_KEY</p> : null}
       <p className="tv-hint">▲▼ next film   ◀▶ channel   OK actions   {pos + 1} / {channel.picks.length}</p>
       {variant === "a" ? foot : null}
     </div>
@@ -247,19 +301,27 @@ export function TvApp({ variant }: { variant: "a" | "b" }) {
     <div className={`tv tv-${variant}`} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} onClick={onClick} data-variant={variant}>
       {variant === "a" ? (
         <>
-          <Media pick={pick} trailerOn={trailerFor === pick.id} />
+          <Media pick={pick} trailerOn={trailerFor === pick.key} />
           <div className="top"><Strip channels={channels} active={state.channel} /></div>
           {info}
         </>
       ) : (
         <>
-          <Media pick={pick} trailerOn={trailerFor === pick.id} />
+          <Media pick={pick} trailerOn={trailerFor === pick.key} />
           {info}
           <div className="bottom"><Strip channels={channels} active={state.channel} />{foot}</div>
         </>
       )}
 
       {notice ? <div className="toast" role="alert">{notice}</div> : null}
+
+      {playing ? (
+        <div className="player" role="dialog" aria-label="Video player" tabIndex={0} ref={keepPlayerFocus}>
+          {/* Focus stays on the parent: a focused iframe swallows the remote's keys and Back could not close the player. */}
+          <iframe src={detourEmbed(playing, "watch")} allow="autoplay; encrypted-media; fullscreen" allowFullScreen title="Detour video" tabIndex={-1} />
+          <button className="btn player-close" type="button" onClick={(e) => { e.stopPropagation(); setPlaying(null); }}>Back to the channels</button>
+        </div>
+      ) : null}
 
       {askDay && state.sheet === null ? (
         <div className="prompt" role="dialog" aria-label="Evening log">

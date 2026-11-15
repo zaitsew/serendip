@@ -1,6 +1,8 @@
 import type { DatabaseSync } from "node:sqlite";
 import { db as defaultDb } from "./db";
+import { quotaDay } from "../core/detour";
 import type { Film, Prefs, Taste } from "../core/types";
+import { createYtStore } from "./ytstore";
 
 /** Everything the person owns: prefs, marks, actions, events, the evening log. A thin layer over SQLite. */
 
@@ -8,7 +10,7 @@ export const DEFAULT_PREFS: Prefs = { providers: [], languages: ["en", "es"], su
 
 export type Role = "seed" | "dislike" | "seen";
 export type Action = "save" | "seen" | "dismiss";
-export type EventType = "open" | "pick_shown";
+export type EventType = "open" | "pick_shown" | "detour_shown" | "detour_watch";
 
 export const EVENING_SOURCES = ["serendip", "netflix", "zapping", "other"] as const;
 export type EveningSource = (typeof EVENING_SOURCES)[number];
@@ -35,7 +37,10 @@ export function createStore(d: DatabaseSync = defaultDb()) {
     d.prepare(sql).run(f.id, JSON.stringify(f));
   };
 
+  const yt = createYtStore(d, { get: getKv, set: setKv }, now);
+
   return {
+    yt,
     getPrefs(): Prefs {
       const raw = getKv("prefs");
       return raw ? { ...DEFAULT_PREFS, ...(JSON.parse(raw) as Partial<Prefs>) } : DEFAULT_PREFS;
@@ -140,6 +145,7 @@ export function createStore(d: DatabaseSync = defaultDb()) {
         dismissals: one("SELECT COUNT(*) AS n FROM actions WHERE action = 'dismiss'"),
         evenings_logged: one("SELECT COUNT(*) AS n FROM evenings"),
         last_open: last.at ? new Date(last.at).toISOString() : "never",
+        ...yt.ytUsage(quotaDay(now()), getKv("yt_refresh_sealed") !== null),
       };
     },
     getKv,

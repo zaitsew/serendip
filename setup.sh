@@ -28,3 +28,10 @@ echo "Start it:   npm run dev -- -H 0.0.0.0"
 echo "On this Mac: http://localhost:3000/tv"
 [ -n "$ip" ] && echo "On the TV:   http://$ip:3000/tv   (same Wi-Fi)"
 grep -q '^TMDB_READ_TOKEN=.\+' .env || echo "Note: no TMDB_READ_TOKEN yet, so you get the sample catalog. See docs/GETTING-STARTED.md."
+if ! grep -q '^YOUTUBE_API_KEY=.\+' .env; then
+  echo "Note: no YOUTUBE_API_KEY yet. /detour and the Detour channel show labelled sample cards, and the Takeout cluster is by channel only. Unlocks: topic clusters and real Detour videos. See docs/GETTING-STARTED.md, step 5."
+fi
+if ! grep -q '^GOOGLE_OAUTH_CLIENT_ID=.\+' .env || ! grep -q '^GOOGLE_OAUTH_CLIENT_SECRET=.\+' .env; then
+  echo "Note: no Google OAuth client (GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET). Optional. Unlocks: a private \"Serendip Detour\" playlist you can play in the TV's YouTube app. See docs/GETTING-STARTED.md, step 6."
+fi
+echo "Takeout: upload watch-history.json at /setup to see the cluster you are stuck in (docs/GETTING-STARTED.md, step 4)."

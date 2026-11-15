@@ -28,6 +28,8 @@ if [ -f .env ]; then
 fi
 
 [ -n "${SERENDIP_OWNER_KEY:-}" ] || missing+=("env: SERENDIP_OWNER_KEY (cp .env.example .env; generate one with: openssl rand -hex 24)")
+[ -n "${YOUTUBE_API_KEY:-}" ] || notes+=("YOUTUBE_API_KEY is not set: Detour shows sample cards and the Takeout cluster is by channel only (unlocks topic clusters and real Detour videos)")
+{ [ -n "${GOOGLE_OAUTH_CLIENT_ID:-}" ] && [ -n "${GOOGLE_OAUTH_CLIENT_SECRET:-}" ]; } || notes+=("GOOGLE_OAUTH_CLIENT_ID / GOOGLE_OAUTH_CLIENT_SECRET are not set: no 'Serendip Detour' playlist in your YouTube account (optional)")
 [ -n "${TMDB_READ_TOKEN:-}" ] || notes+=("TMDB_READ_TOKEN is not set: Serendip runs on the sample catalog (see docs/GETTING-STARTED.md)")
 
 if command -v node >/dev/null 2>&1; then

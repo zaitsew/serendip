@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { TakeoutSection } from "./Detour";
 
 interface Brief { id: number; title: string; year: number | null }
 interface Hit extends Brief { genres: string[] }
@@ -168,7 +169,7 @@ export function SetupForm() {
         <h1>Setup</h1>
         <p className="muted">Services in Spain, languages, and the films you love. {s.mode === "sample" ? "You are on the sample catalog, so only 32 films exist." : null}</p>
       </header>
-      <nav className="nav"><Link href="/">Home</Link><Link href="/tv">Channels</Link></nav>
+      <nav className="nav"><Link href="/">Home</Link><Link href="/tv">Channels</Link><Link href="/detour">Detour</Link></nav>
 
       <section className="card" aria-label="Services">
         <h2>Your services in Spain</h2>
@@ -209,6 +210,8 @@ export function SetupForm() {
 
       <Importer title="Letterboxd export (ZIP)" hint="On Letterboxd: Settings, Data, Export your data. Ratings of 4 or more and your likes become taste seeds; everything watched counts as seen." url="/api/import/letterboxd" accept=".zip,application/zip" onDone={() => load()} />
       <Importer title="Netflix viewing activity (CSV)" hint="On Netflix: Account, Profile, Viewing activity, Download all. Titles become already seen; series episodes are skipped." url="/api/import/netflix" accept=".csv,text/csv" onDone={() => load()} />
+
+      <TakeoutSection />
 
       <p className="muted">{s.counts.seeds} taste seeds and {s.counts.seen} films seen so far.</p>
     </main>
