@@ -237,6 +237,15 @@ describe("playlist sync", () => {
   });
 });
 
+describe("playlist lookup", () => {
+  it("treats a deleted playlist as gone, so the sync can create a new private one", async () => {
+    const notFound = () => Promise.resolve(json({ error: { errors: [{ reason: "playlistNotFound" }] } }, 404));
+    expect(await createPlaylistClient(notFound, "tok").getPlaylist("PLgone")).toBeNull();
+    const denied = () => Promise.resolve(json({ error: { errors: [{ reason: "forbidden" }] } }, 403));
+    await expect(createPlaylistClient(denied, "tok").getPlaylist("PL1")).rejects.toBeInstanceOf(OAuthError);
+  });
+});
+
 describe("YouTube Data API client", () => {
   it("parses ISO durations", () => {
     expect(parseDuration("PT4M")).toBe(240);

@@ -121,7 +121,14 @@ export function createPlaylistClient(f: FetchFn, token: string): PlaylistClient 
   };
   return {
     async getPlaylist(id) {
-      const d = (await go("GET", "playlists", { part: "status", id, maxResults: "1" })) as { items?: Array<{ id: string; status?: { privacyStatus?: string } }> };
+      let d: { items?: Array<{ id: string; status?: { privacyStatus?: string } }> };
+      try {
+        d = (await go("GET", "playlists", { part: "status", id, maxResults: "1" })) as typeof d;
+      } catch (e) {
+        // A playlist the owner deleted is "gone", not a failure: the sync then creates a new private one.
+        if (e instanceof OAuthError && (e.code === "playlistNotFound" || e.code === "http404")) return null;
+        throw e;
+      }
       const hit = d.items?.find((p) => p.id === id);
       return hit ? { privacy: hit.status?.privacyStatus ?? "unknown" } : null;
     },
