@@ -65,6 +65,14 @@ describe("zip", () => {
     expect(() => readZip(big, { maxTotal: 100_000 })).toThrow(/too much data/);
     expect(() => readZip(makeZip({ "a.csv": "x".repeat(60_000) }, true), { maxEntry: 1000 })).toThrow(/too large/);
   });
+  it("refuses a stored entry that lies about its size", () => {
+    const zip = makeZip({ "a.csv": "x".repeat(5000) });
+    // Declare usize=0 in the central directory (offset 24 of the first central header).
+    const cd = zip.indexOf(Buffer.from([0x50, 0x4b, 0x01, 0x02]));
+    zip.writeUInt32LE(0, cd + 24);
+    expect(() => readZip(zip)).toThrow(/too large or inconsistent/);
+    expect(() => readZip(makeZip({ "a.csv": "x".repeat(5000) }), { maxEntry: 1000 })).toThrow(/too large/);
+  });
   it("rejects a non-zip", () => {
     expect(() => readZip(Buffer.from("not a zip file at all, really not"))).toThrow(/ZIP/);
   });

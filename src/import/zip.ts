@@ -51,7 +51,12 @@ export function readZip(buf: Buffer, limits: ZipLimits = {}): Map<string, Buffer
     const start = local + 30 + buf.readUInt16LE(local + 26) + buf.readUInt16LE(local + 28);
     const raw = buf.subarray(start, start + csize);
     let data: Buffer;
-    if (method === 0) data = Buffer.from(raw);
+    if (method === 0) {
+      // A stored entry is its own size; never trust the declared uncompressed size for it.
+      if (csize !== usize || csize > maxEntry) throw new Error(`ZIP entry too large or inconsistent: ${name}`);
+      if (total + csize > maxTotal) throw new Error("ZIP expands to too much data.");
+      data = Buffer.from(raw);
+    }
     else if (method === 8) {
       // The declared size can lie, so the inflater itself stops at what is left of the budget.
       try { data = inflateRawSync(raw, { maxOutputLength: Math.max(1, Math.min(maxEntry, maxTotal - total)) }); }

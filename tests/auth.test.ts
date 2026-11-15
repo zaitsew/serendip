@@ -23,14 +23,17 @@ describe("owner key", () => {
     expect(l.locked("ip")).toBe(true);
     expect(l.locked("other")).toBe(false);
   });
-  it("never blocks a valid key or session because of other clients' wrong keys", () => {
+  it("checks the lockout before the key, and never blocks a valid session", () => {
     vi.stubEnv("SERENDIP_OWNER_KEY", "secret-key");
     lockout().reset();
     const req = (h: Record<string, string>) => new Request("http://x/api/state", { headers: h });
     for (let i = 0; i < 12; i++) expect(requireOwner(req({ authorization: `Bearer wrong-${i}` }))?.status).toBe(i < 10 ? 401 : 429);
     expect(requireOwner(req({ authorization: "Bearer wrong-again" }))?.status).toBe(429);
-    expect(requireOwner(req({ authorization: "Bearer secret-key" }))).toBeNull();
+    // A locked-out guesser gets 429 even for the right key: guessing has a hard attempt limit.
+    expect(requireOwner(req({ authorization: "Bearer secret-key" }))?.status).toBe(429);
+    // A signed-in owner always passes, whatever others did.
     expect(requireOwner(req({ cookie: `${COOKIE_NAME}=${sessionValue("secret-key")}` }))).toBeNull();
+    expect(requireOwner(req({ cookie: `${COOKIE_NAME}=${sessionValue("secret-key")}`, authorization: "Bearer wrong" }))).toBeNull();
   });
   it("counts a client's wrong keys separately when a trusted proxy names the client", () => {
     vi.stubEnv("SERENDIP_OWNER_KEY", "secret-key");

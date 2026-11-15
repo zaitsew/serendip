@@ -122,23 +122,39 @@ export function clientIp(headers: Headers, env: Env = process.env): string {
   return "shared";
 }
 
+export type GateResult =
+  | { ok: true }
+  | { ok: false; locked: Response }
+  | { ok: false; status: 401 | 503; error: string };
+
 /**
- * The throttle for a request that did NOT authenticate: a 429 when its client is locked out, otherwise
- * `null` after counting a wrong bearer key against that client. A request that authenticates never gets
- * here, so other people's wrong keys can never lock the owner out.
+ * The decision for every page and API request.
+ *  - A valid session cookie always passes, so other people's wrong keys never lock out a signed-in owner.
+ *  - A bearer key is checked against the lockout BEFORE it is compared. A locked-out guesser gets 429
+ *    even for the right key, so guessing has a hard attempt limit.
+ *  - Sign-in (app/signin/actions.ts) follows the same order. Without SERENDIP_TRUST_PROXY all failures
+ *    share one bucket, so someone on your network can delay a NEW sign-in for ten minutes; an existing
+ *    session is unaffected. Behind a proxy you control, set SERENDIP_TRUST_PROXY=1 for per-IP buckets.
  */
-export function throttleFailure(headers: Headers, presented: boolean): Response | null {
-  const ip = clientIp(headers);
-  if (ownerKey() && lockout().locked(ip)) return json(429, "Too many wrong keys. Wait ten minutes.", { "Retry-After": "600" });
-  if (presented) lockout().fail(ip);
-  return null;
+export function gate(headers: Headers, env: Env = process.env): GateResult {
+  const session = authenticate({ cookie: headers.get("cookie") }, env);
+  if (session.ok) return { ok: true };
+  if (session.status === 503) return { ok: false, status: 503, error: session.error };
+  const authorization = headers.get("authorization");
+  if (!/^Bearer\s+\S/i.test(authorization?.trim() ?? "")) return { ok: false, status: 401, error: session.error };
+  const ip = clientIp(headers, env);
+  if (lockout().locked(ip)) return { ok: false, locked: json(429, "Too many wrong keys. Wait ten minutes.", { "Retry-After": "600" }) };
+  const bearer = authenticate({ authorization }, env);
+  if (bearer.ok) return { ok: true };
+  lockout().fail(ip);
+  return { ok: false, status: 401, error: bearer.error };
 }
 
 /** `null` when the request is the owner's; otherwise the 401/429/503 response to return. */
 export function requireOwner(request: Request): Response | null {
-  const r = authenticate({ cookie: request.headers.get("cookie"), authorization: request.headers.get("authorization") });
-  if (r.ok) return null;
-  return throttleFailure(request.headers, r.presented) ?? json(r.status, r.error);
+  const res = gate(request.headers);
+  if (res.ok) return null;
+  return "locked" in res ? res.locked : json(res.status, res.error);
 }
 
 function json(status: number, error: string, headers?: Record<string, string>): Response {
