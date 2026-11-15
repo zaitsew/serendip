@@ -6,6 +6,9 @@ import {
 import { refreshDetour, type DetourDeps } from "../src/server/detour";
 import { openDb } from "../src/server/db";
 import { createStore } from "../src/server/store";
+import { encryptSecret } from "../src/server/crypto";
+import { OAuthError, type PlaylistClient } from "../src/youtube/oauth";
+import type { PlaylistItem } from "../src/core/detour";
 import type { SearchHit, VideoDetail, YoutubeClient } from "../src/youtube/api";
 
 const NOW = Date.parse("2026-11-15T12:00:00Z");
@@ -245,5 +248,32 @@ describe("refreshDetour enforces the daily budget", () => {
     const beta = (list: typeof after) => list.filter((p) => p.field === "beta").map((p) => p.videoId).sort();
     expect(beta(after)).toEqual(beta(before)); // beta kept as it was
     expect(after.filter((p) => p.field === "alpha").map((p) => p.videoId)).not.toEqual(before.filter((p) => p.field === "alpha").map((p) => p.videoId));
+  });
+
+  it("clears the playlist when a successful refresh finds no qualifying video", async () => {
+    const s = createStore(openDb(":memory:"));
+    s.yt.setFields(["physics"]);
+    s.yt.setSealedToken(encryptSecret("rt", "owner-key"));
+    s.yt.setPlaylistId("PL1");
+    let items: PlaylistItem[] = [{ itemId: "i1", videoId: "YESTERDAY1" }, { itemId: "i2", videoId: "YESTERDAY2" }];
+    const playlist: PlaylistClient = {
+      async getPlaylist() { return { privacy: "private" }; },
+      async createPlaylist() { throw new Error("must not create"); },
+      async listItems() { return [...items]; },
+      async deleteItem(id) { items = items.filter((i) => i.itemId !== id); },
+      async insertItem(_p, videoId) { items.push({ itemId: `n${items.length}`, videoId }); },
+    };
+    const tokenFetch = (async () => new Response(JSON.stringify({ access_token: "at" }), { status: 200 })) as unknown as typeof fetch;
+    const d = (yt: YoutubeClient, now: number): DetourDeps => ({ yt, oauth: { clientId: "c", clientSecret: "s", redirectUri: "http://localhost:3000/cb" }, ownerKey: "owner-key", fetch: tokenFetch, now: () => now, playlist: () => playlist });
+    const { yt } = fakeYt();
+    expect((await refreshDetour(s, d(yt, NOW), { force: true })).playlist).toBe("synced");
+    expect(items.length).toBe(12);
+    // Tomorrow every result is a Short: a successful run with zero picks.
+    const shorts: YoutubeClient = { search: yt.search, async videos(ids) { return (await yt.videos(ids, [])).map((v) => ({ ...v, seconds: 30 })); } };
+    const r = await refreshDetour(s, d(shorts, NOW + DAY_MS), { force: true });
+    expect(r).toMatchObject({ status: "built", picks: 0, playlist: "synced" });
+    expect(items).toEqual([]);
+    expect(s.yt.getPicks()?.note).toMatch(/No video passed/);
+    void OAuthError;
   });
 });

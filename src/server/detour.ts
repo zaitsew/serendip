@@ -226,6 +226,8 @@ export async function refreshDetour(store: Store, deps: DetourDeps, opts: { forc
     return summary("error", existing?.picks.length ?? 0, calls, note);
   }
   store.yt.setAttempt({ at: now, error: null });
+  // An empty list is a real answer: the playlist is cleared below, so yesterday's videos do not linger.
+  if (picks.length === 0 && !failed) note = "No video passed the filters today. The playlist, if connected, was emptied.";
   store.yt.setPicks({ day, builtAt: now, picks, searched: [...new Set(tasks.slice(0, calls).map((t) => t.field))], note });
   const playlist = await syncToYoutube(store, deps, picks.map((p) => p.videoId));
   return summary("built", picks.length, calls, note, playlist);
@@ -271,7 +273,7 @@ export async function syncPlaylist(client: PlaylistClient, store: Store, videoId
 export async function syncToYoutube(store: Store, deps: DetourDeps, videoIds: string[]): Promise<RefreshResult["playlist"]> {
   const sealed = store.yt.getSealedToken();
   if (!sealed || !deps.oauth || !deps.ownerKey) return "off";
-  if (videoIds.length === 0) return "skipped";
+  if (videoIds.length === 0 && !store.yt.getPlaylistId()) return "skipped"; // nothing to empty, nothing to create
   const at = deps.now();
   const fail = (error: string) => { store.yt.setPlaylistStatus({ at, ok: false, added: 0, removed: 0, error, playlistId: store.yt.getPlaylistId() }); return "failed" as const; };
   const refresh = decryptSecret(sealed, deps.ownerKey);
