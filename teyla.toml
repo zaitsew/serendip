@@ -1,0 +1,42 @@
+# teyla.toml — what must run without you, and what only you can confirm.
+
+[product]
+name = "serendip"
+usage = "./check.sh usage"
+
+[productize]
+users = "owner"
+target = "family"
+platforms = ["web"]
+primary = "web"                         # one web app: /tv in the Xiaomi Google TV browser, same page on the iPhone
+identity = "shared-key"
+tenancy = "single"                      # one owner, one SQLite file
+backend = "local-mac"                   # S3 moves it to the droplet
+llm = "none"                            # S1 ranking is deterministic; no model anywhere
+first_run = "sign-in"
+sample_data = "labelled"                # no TMDB token: a banner says "Sample catalog — add TMDB_READ_TOKEN"
+onboarding_doc = "docs/GETTING-STARTED.md"
+secrets = ["SERENDIP_OWNER_KEY", "TMDB_READ_TOKEN"]
+cost_cap = ""
+
+[productize.distribution]
+web = "none"                            # local Mac for now; droplet in S3
+
+[[check]]
+name = "first-run check passes on a clean machine"
+how = "clone the repo, run ./setup.sh, then ./check.sh, read what it says"
+status = "untested"
+
+[[check]]
+name = "/tv works with a D-pad remote on the Xiaomi Google TV browser"
+how = "npm run dev -- -H 0.0.0.0, open http://<mac-ip>:3000/tv?v=a and ?v=b on the TV; zap with the arrows, OK opens actions, Back closes"
+status = "untested"
+
+[security]
+# The store holds: the taste list (film titles), what you saw or saved, an evening log, and a TMDB cache.
+# No payment data, no health data, no messages, no files. No third-party calls except TMDB (server) and
+# youtube-nocookie.com embeds (browser, trailers only).
+data = ["account"]
+trifecta = []
+secrets = "runtime-env"
+release = ["leak"]
