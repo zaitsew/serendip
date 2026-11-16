@@ -3,6 +3,7 @@ import { chunkVideos, compactTakeout, MAX_TAKEOUT_VIDEOS, TAKEOUT_CHUNK_SIZE, Ta
 import { openDb } from "../src/server/db";
 import { importTakeout } from "../src/server/detour";
 import { createStore } from "../src/server/store";
+import { STAGE_TTL_MS } from "../src/server/ytstore";
 import { MAX_CHUNK_BYTES, validateTakeoutPayload } from "../src/server/takeout-payload";
 
 const watch = (id: string, over: Record<string, unknown> = {}) => ({
@@ -67,15 +68,41 @@ describe("compact Takeout through the store", () => {
     expect(viaChunks.yt.recentWatchedIds(10)).toEqual(full.yt.recentWatchedIds(10));
   });
 
+  it("never lets two interleaved uploads erase each other's chunks", () => {
+    const s = createStore(openDb(":memory:"));
+    const row = (i: number) => ({ videoId: vid(i), title: "t", channel: null, channelId: null, lastAt: 1, plays: 1 });
+    s.yt.stageWatched("upload-aaaaaaaa", [row(1)]);
+    s.yt.stageWatched("upload-bbbbbbbb", [row(2)]);
+    s.yt.stageWatched("upload-aaaaaaaa", [row(3)]);
+    expect(s.yt.commitWatched("upload-aaaaaaaa")).toEqual({ videos: 2, channels: 0 });
+    expect([...s.yt.watchedIds()].sort()).toEqual([vid(1), vid(3)].sort());
+    s.yt.stageWatched("upload-bbbbbbbb", [row(4)]);
+    expect(s.yt.commitWatched("upload-bbbbbbbb")).toEqual({ videos: 2, channels: 0 });
+    expect([...s.yt.watchedIds()].sort()).toEqual([vid(2), vid(4)].sort());
+  });
+
+  it("drops an abandoned upload after an hour, and only then", () => {
+    const s = createStore(openDb(":memory:"));
+    const row = (i: number) => ({ videoId: vid(i), title: "t", channel: null, channelId: null, lastAt: 1, plays: 1 });
+    s.yt.stageWatched("upload-aaaaaaaa", [row(1)], 1_000);
+    s.yt.stageWatched("upload-bbbbbbbb", [row(2)], 1_000 + STAGE_TTL_MS - 1);
+    expect(s.yt.stagedCount("upload-aaaaaaaa")).toBe(1);
+    s.yt.stageWatched("upload-bbbbbbbb", [row(3)], 1_000 + STAGE_TTL_MS + 1);
+    expect(s.yt.stagedCount("upload-aaaaaaaa")).toBe(0);
+    expect(s.yt.stagedCount("upload-bbbbbbbb")).toBe(2);
+  });
+
   it("keeps the old history until the commit, and replaces it whole", () => {
     const s = createStore(openDb(":memory:"));
     importTakeout(s, text);
     expect(s.yt.watchedCount()).toBe(2);
     s.yt.stageWatched("upload-aaaaaaaa", [{ videoId: vid(1), title: "t", channel: null, channelId: null, lastAt: 1, plays: 1 }]);
     expect(s.yt.watchedCount()).toBe(2); // a half-finished upload changes nothing
-    s.yt.stageWatched("upload-bbbbbbbb", [{ videoId: vid(2), title: "t", channel: null, channelId: null, lastAt: 1, plays: 1 }]); // a new upload clears the stale one
-    expect(s.yt.commitWatched("upload-aaaaaaaa")).toBeNull();
+    expect(s.yt.commitWatched("upload-zzzzzzzz")).toBeNull(); // nothing staged under that id
     expect(s.yt.watchedCount()).toBe(2);
+    expect(s.yt.commitWatched("upload-aaaaaaaa")).toEqual({ videos: 1, channels: 0 });
+    expect([...s.yt.watchedIds()]).toEqual([vid(1)]);
+    s.yt.stageWatched("upload-bbbbbbbb", [{ videoId: vid(2), title: "t", channel: null, channelId: null, lastAt: 1, plays: 1 }]);
     expect(s.yt.commitWatched("upload-bbbbbbbb")).toEqual({ videos: 1, channels: 0 });
     expect([...s.yt.watchedIds()]).toEqual([vid(2)]);
   });
