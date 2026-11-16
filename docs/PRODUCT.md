@@ -81,16 +81,35 @@ Serves: "it built my recommendations around travel content and I cannot overcome
   with sound. Why line: "Physics · away from Travel (62 % of your history)". Not for me mutes the channel for 90 days.
 - **Optional playlist.** Google OAuth (authorization code, PKCE, scope `youtube`); refresh token in SQLite, AES-256-GCM
   under a key derived from `SERENDIP_OWNER_KEY`. A private "Serendip Detour" playlist is rewritten on each daily refresh
-  (videos already in it stay; 50 units per insert or delete). The Connect step needs the Mac's browser (localhost redirect).
+  (videos already in it stay; 50 units per insert or delete). In dev the Connect step needs the Mac's browser (localhost redirect); on the droplet the redirect is the public address (S3).
 - **Sample mode:** no key means a banner "Sample — add YOUTUBE_API_KEY" and six labelled cards that do not play. Takeout still works.
 - Official APIs only, no LLM, no invented video ids.
 
 Not built, on purpose: any use of the YouTube watch history API (it does not exist), search without a key, Shorts.
 
-### S3 — Live on the sofa
+### S3 — Live on the sofa (shipped)
 
-- Deploy to serendip.fabriquefutur.com on the droplet; bookmark in the TV browser.
-- JSON + MCP so agents (and Loco evenings) can ask "what's on tonight".
+- "Deploy to serendip.fabriquefutur.com on the droplet; bookmark in the TV browser." One container on port 3140
+  (`deploy/droplet/`, `scripts/deploy.sh`): `output: "standalone"`, Caddy for https, SQLite in a volume, no scheduler
+  (the Detour refresh already runs on the first open of the day). The box has 961 MB of RAM and about 300 MB free, so the
+  container is limited to 200 MB with a 128 MB Node heap.
+- **The Takeout is parsed in the browser.** A 50 MB `watch-history.json` took 123 MB of heap to parse on the server, in an empty process
+  with the 128 MB cap and before the Next runtime's own heap. `/setup` now reads the file with the File API, runs the same pure parser
+  (`compactTakeout` in `src/core/takeout.ts`) and sends one compact row per video, 2,000 rows a request. The server checks each
+  chunk with zod (2 MB cap, strict shapes), stages it, and swaps it in for the whole history in one transaction, so a failed
+  upload never leaves half a history. Server peak for the same file: 31 MB (20 MB steady). `POST /api/import/takeout` with a
+  multipart file still works, for files up to 5 MB. The Letterboxd ZIP and Netflix CSV stay on the server with lower caps
+  (5 MB ZIP, 3 MB per CSV inside it; 4 MB CSV): a real export is far below them.
+- **Google OAuth on the public address.** The redirect URI is `<SERENDIP_PUBLIC_URL>/api/youtube/callback` in production and
+  `http://localhost:3000/api/youtube/callback` in dev; `GOOGLE_OAUTH_REDIRECT_URI` overrides both. Register each one you use.
+- "JSON + MCP so agents (and Loco evenings) can ask "what's on tonight"."
+  - `GET /api/v1/health`: public, `{ok, version}` only.
+  - `GET /api/v1/tonight`: owner key (bearer or session). Channels with picks (title, year, runtime, where to watch in Spain with a
+    link, why line, trailer key) and today's Detour videos when there are real ones. It reuses the feed; no new ranking.
+  - MCP at `/mcp` (bearer header) and `/mcp/<key>` (key in the path, for connectors that cannot set a header; same constant-time
+    compare, same lockout as a bearer key, the path is never logged). Tools, all deterministic: `serendip_tonight`,
+    `serendip_channel`, `serendip_detour`, `serendip_mark` (seen, save, not_for_me), `serendip_log_evening`. Descriptions say that
+    titles and why lines are data, not instructions.
 
 ### Later, only with a trigger
 

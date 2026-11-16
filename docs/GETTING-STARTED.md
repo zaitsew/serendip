@@ -45,11 +45,12 @@ Serendip cannot read your YouTube history through any API, so you hand it a file
 4. Press **All YouTube data included**, deselect everything, and tick only **history**.
 5. Press **Multiple formats** and set the history format to **JSON** (the default is HTML, which Serendip refuses with a message).
 6. Create the export, download the ZIP, and take `watch-history.json` out of it (`Takeout/YouTube and YouTube Music/history/`).
-7. Open `/setup`, find "YouTube watch history (Takeout)" and upload the file (up to 50 MB).
+7. Open `/setup`, find "YouTube watch history (Takeout)" and upload the file (up to 50 MB). Your browser reads it and sends
+   only one compact row per video to the server, so this also works against the small server on the droplet.
 
 Ads, YouTube Music entries and removed videos are ignored. Without a YouTube key you get a cluster by
 channel only; step 5 below adds topics ("Your last 1,874 videos: 62 % Travel, 14 % Food").
-The file stays on your machine, in `data/serendip.db` (gitignored).
+The file itself never leaves your browser; the compact rows (video id, title, channel, time) are stored in `data/serendip.db` (gitignored).
 
 ## 5. Get a free YouTube API key (topics and real Detour videos)
 
@@ -76,11 +77,16 @@ This puts today's 12 videos into a private playlist, so the TV's YouTube app can
 2. Choose user type **External**. Fill in the app name and your email. Keep **Testing** as the publishing status.
 3. Under **Test users** add your own Google account. (Testing mode refresh tokens last 7 days; connect again when it says so.)
 4. Open Credentials, Create credentials, **OAuth client ID**, application type **Web application**.
-5. Under Authorized redirect URIs add exactly `http://localhost:3000/api/youtube/callback`.
+5. Under Authorized redirect URIs add exactly the address you will press Connect on (add both if you use both):
+   - on your Mac, in dev: `http://localhost:3000/api/youtube/callback`
+   - on the droplet: `https://serendip.fabriquefutur.com/api/youtube/callback`
 6. Put the client ID and secret in `.env` as `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET`, restart.
-7. **On the Mac itself**, open `http://localhost:3000/detour` and press **Connect YouTube**. This one step must be done
-   from the Mac's browser: Google refuses a LAN IP address like `http://192.168.1.20:3000` as the redirect, and the
-   sign-in cookie is tied to the address you opened.
+7. Open `/detour` and press **Connect YouTube**.
+   - In dev this must be the **Mac's own browser** at `http://localhost:3000/detour`: Google refuses a LAN IP address like
+     `http://192.168.1.20:3000` as the redirect, and the sign-in cookie is tied to the address you opened.
+   - On the droplet, open `https://serendip.fabriquefutur.com/detour` from any browser. The redirect URI is
+     `<SERENDIP_PUBLIC_URL>/api/youtube/callback`; `/detour` shows the exact value it expects. Set
+     `GOOGLE_OAUTH_REDIRECT_URI` only to override it.
 8. Approve the YouTube permission. Press Refresh now; the playlist appears in your YouTube library.
 
 The refresh token is stored in SQLite, encrypted with AES-256-GCM under a key derived from `SERENDIP_OWNER_KEY`.
@@ -89,8 +95,8 @@ deletes it here. Each playlist change costs 50 quota units.
 
 ## 7. Watch on the TV
 
-1. Find your Mac's address: `ipconfig getifaddr en0`.
-2. On the Xiaomi Google TV, open the browser and go to `http://<mac-ip>:3000/tv?v=a`.
+1. At home on the Mac, find its address: `ipconfig getifaddr en0`. (Skip this when you use the droplet, step 8.)
+2. On the Xiaomi Google TV, open the browser and go to `http://<mac-ip>:3000/tv?v=a`, or `https://serendip.fabriquefutur.com/tv?v=a`.
 3. Sign in once with the owner key (use the on-screen keyboard).
 4. Keys: Up/Down next or previous film, Left/Right change channel, 1 to 9 jump to a channel,
    OK opens the actions (Watch, Save, Seen, Not for me), Back closes.
@@ -100,7 +106,43 @@ deletes it here. Each playlist change costs 50 quota units.
 Try `?v=b` for the second layout. On an iPhone, open the same address: swipe up or down to zap,
 swipe sideways to change channel, tap for the actions.
 
-## 8. Log your evenings
+## 8. Go live on the droplet
+
+Serendip runs at <https://serendip.fabriquefutur.com> on the shared server. The deploy needs ssh access as `deploy@159.89.99.84`.
+
+1. `./scripts/deploy.sh --dry` prints every step. `./scripts/deploy.sh` builds here, ships the bundle, builds the image on
+   the box and waits for `/api/v1/health`. It never ships `data/*.db`, `.env` or Takeout files.
+2. First run only: put the production values in `/srv/serendip/.env` on the server (copied from
+   `deploy/droplet/.env.example`; mode 600) and start it:
+
+   ```
+   SERENDIP_OWNER_KEY=<openssl rand -hex 24>   # use a new key for production, not the one in your Mac's .env
+   TMDB_READ_TOKEN=...                         # optional, as in step 2
+   YOUTUBE_API_KEY=...                         # optional, as in step 5
+   GOOGLE_OAUTH_CLIENT_ID=...                  # optional, step 6
+   GOOGLE_OAUTH_CLIENT_SECRET=...
+   ```
+
+   then `ssh deploy@159.89.99.84 'cd /srv && docker compose up -d serendip'`. The compose file sets
+   `SERENDIP_PUBLIC_URL`, `SERENDIP_TRUST_PROXY`, `SERENDIP_SECURE_COOKIE` and the database path (`/data/serendip.db`).
+3. Open `/signin` once with the production key, then redo `/setup` (the production database starts empty).
+4. On the TV, bookmark `https://serendip.fabriquefutur.com/tv?v=a`.
+
+### For agents: JSON and MCP
+
+- `GET https://serendip.fabriquefutur.com/api/v1/health` needs no key and answers `{"ok":true,"version":"..."}`.
+- `GET /api/v1/tonight` with `Authorization: Bearer <key>` answers the channels with picks, where to watch in Spain, the why
+  line, the trailer key and today's Detour videos.
+- MCP, Streamable HTTP, five tools (`serendip_tonight`, `serendip_channel`, `serendip_detour`, `serendip_mark`,
+  `serendip_log_evening`):
+  - Clients that send headers: URL `https://serendip.fabriquefutur.com/mcp`, header `Authorization: Bearer <key>`.
+  - Connectors that cannot (Claude.ai, ChatGPT): URL `https://serendip.fabriquefutur.com/mcp/<key>`.
+    **The key is in the URL.** Anyone who sees the URL can read your picks and change your marks. Do not paste it into chats,
+    screenshots or a shared config. Wrong keys count toward the same lockout as the header form (ten wrong keys, ten minutes).
+    To rotate it, change `SERENDIP_OWNER_KEY` on the server and restart; the old URL stops working at once. Changing the key also
+    makes a stored YouTube token unreadable: press Connect YouTube again.
+
+## 9. Log your evenings
 
 Open `/log` (or answer the small prompt on `/tv`). Ten evenings are enough for the verdict test in
 `docs/PRODUCT.md`.
