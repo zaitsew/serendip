@@ -250,7 +250,12 @@ export function DetourView({ connectStatus }: { connectStatus: { kind: string; r
         ) : (
           <>
             <a className="btn btn-primary" href="/api/youtube/connect">Connect YouTube</a>
-            <p className="muted">Do this one step from the Mac&apos;s own browser at http://localhost:3000 (Google refuses LAN addresses as the redirect). Redirect URI: <code>{s.oauth.redirectUri}</code></p>
+            <p className="muted">
+              {s.oauth.redirectUri && /^https?:\/\/(localhost|127\.0\.0\.1)/.test(s.oauth.redirectUri)
+                ? "Do this one step from the Mac's own browser at http://localhost:3000 (Google refuses LAN addresses as the redirect). "
+                : "Open Serendip at its public address, then press Connect. "}
+              Redirect URI registered at Google must be exactly: <code>{s.oauth.redirectUri}</code>
+            </p>
           </>
         )}
       </section>

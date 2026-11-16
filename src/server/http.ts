@@ -17,3 +17,12 @@ export async function owned<T extends z.ZodType>(request: Request, schema: T): P
   if (!parsed.success) return { ok: false, response: fail(400, parsed.error.issues.map((i) => `${i.path.join(".") || "body"}: ${i.message}`).join("; ")) };
   return { ok: true, body: parsed.data };
 }
+
+/**
+ * An absolute URL on this site for a redirect. Behind the droplet's proxy the container sees its own bind
+ * address, not the host the browser used, so SERENDIP_PUBLIC_URL (when set) decides the origin.
+ */
+export function siteUrl(request: Request, path: string, env: Record<string, string | undefined> = process.env): string {
+  const pub = env.SERENDIP_PUBLIC_URL?.trim().replace(/\/+$/, "");
+  return new URL(path, pub || request.url).toString();
+}
