@@ -47,6 +47,39 @@ export function createYtStore(d: DatabaseSync, kv: Kv, now: () => number = Date.
         throw e;
       }
     },
+    /** Holds one chunk of an upload. A new upload id clears every older staged upload first. */
+    stageWatched(uploadId: string, videos: WatchedVideo[]): { staged: number } {
+      d.exec("BEGIN");
+      try {
+        if (!(d.prepare("SELECT 1 AS x FROM yt_watched_stage WHERE upload_id = ? LIMIT 1").get(uploadId))) d.exec("DELETE FROM yt_watched_stage");
+        const ins = d.prepare("INSERT OR REPLACE INTO yt_watched_stage (upload_id, video_id, title, channel, channel_id, last_at, plays) VALUES (?, ?, ?, ?, ?, ?, ?)");
+        for (const v of videos) ins.run(uploadId, v.videoId, v.title, v.channel, v.channelId, v.lastAt, v.plays);
+        const staged = n("SELECT COUNT(*) AS n FROM yt_watched_stage WHERE upload_id = ?", uploadId);
+        d.exec("COMMIT");
+        return { staged };
+      } catch (e) {
+        d.exec("ROLLBACK");
+        throw e;
+      }
+    },
+    stagedCount(uploadId: string): number { return n("SELECT COUNT(*) AS n FROM yt_watched_stage WHERE upload_id = ?", uploadId); },
+    /** Swaps the staged upload in for the whole history. Returns null when nothing was staged under that id. */
+    commitWatched(uploadId: string): { videos: number; channels: number } | null {
+      d.exec("BEGIN");
+      try {
+        const staged = n("SELECT COUNT(*) AS n FROM yt_watched_stage WHERE upload_id = ?", uploadId);
+        if (staged === 0) { d.exec("ROLLBACK"); return null; }
+        d.exec("DELETE FROM yt_watched");
+        d.prepare("INSERT INTO yt_watched (video_id, title, channel, channel_id, last_at, plays) SELECT video_id, title, channel, channel_id, last_at, plays FROM yt_watched_stage WHERE upload_id = ?").run(uploadId);
+        d.exec("DELETE FROM yt_watched_stage");
+        const channels = n("SELECT COUNT(DISTINCT COALESCE(channel_id, channel)) AS n FROM yt_watched WHERE COALESCE(channel_id, channel) IS NOT NULL");
+        d.exec("COMMIT");
+        return { videos: staged, channels };
+      } catch (e) {
+        d.exec("ROLLBACK");
+        throw e;
+      }
+    },
     watchedCount(): number { return n("SELECT COUNT(*) AS n FROM yt_watched"); },
     watchedIds(): Set<string> {
       return new Set((d.prepare("SELECT video_id AS id FROM yt_watched").all() as Array<{ id: string }>).map((r) => r.id));

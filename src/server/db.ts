@@ -22,6 +22,8 @@ CREATE TABLE IF NOT EXISTS evenings (day TEXT PRIMARY KEY, watched TEXT NOT NULL
 -- S2: the Takeout watch history, one row per video (repeat watches add to plays).
 CREATE TABLE IF NOT EXISTS yt_watched (video_id TEXT PRIMARY KEY, title TEXT NOT NULL, channel TEXT, channel_id TEXT, last_at INTEGER NOT NULL, plays INTEGER NOT NULL);
 CREATE INDEX IF NOT EXISTS yt_watched_at ON yt_watched (last_at);
+-- Takeout chunks land here first and replace yt_watched in one transaction, so a failed upload never leaves half a history.
+CREATE TABLE IF NOT EXISTS yt_watched_stage (upload_id TEXT NOT NULL, video_id TEXT NOT NULL, title TEXT NOT NULL, channel TEXT, channel_id TEXT, last_at INTEGER NOT NULL, plays INTEGER NOT NULL, PRIMARY KEY (upload_id, video_id));
 -- videos.list metadata for watched videos, cached forever (found = false is cached too).
 CREATE TABLE IF NOT EXISTS yt_meta (video_id TEXT PRIMARY KEY, json TEXT NOT NULL);
 -- YouTube quota days (Pacific): search calls made and units assumed.

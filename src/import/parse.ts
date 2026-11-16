@@ -58,7 +58,9 @@ export function parseLetterboxd(files: Map<string, Buffer>): LetterboxdParsed {
 
 export function parseLetterboxdZip(zip: Buffer): LetterboxdParsed {
   const needed = ["watched.csv", "ratings.csv", "likes/films.csv"];
-  return parseLetterboxd(readZip(zip, { want: (name) => needed.some((n) => name === n || name.endsWith(`/${n}`)) }));
+  // Each CSV is read whole, so the cap keeps a crafted ZIP inside the droplet container's 128 MB heap (3 MB is about 40,000 films).
+  const limits = { maxEntry: 3 * 1024 * 1024, maxTotal: 8 * 1024 * 1024 };
+  return parseLetterboxd(readZip(zip, { want: (name) => needed.some((n) => name === n || name.endsWith(`/${n}`)), ...limits }));
 }
 
 /** "Show: Season 2: Episode" (also Spanish "Temporada", Limited Series, Part, Volume, Book). */

@@ -13,7 +13,8 @@ export async function POST(request: Request) {
   const form = await request.formData().catch(() => null);
   const file = form?.get("file");
   if (!(file instanceof File)) return fail(400, "Send ViewingActivity.csv as the `file` field.");
-  if (file.size > 20 * 1024 * 1024) return fail(413, "That CSV is larger than 20 MB.");
+  // The droplet container has a 128 MB heap: 3 MB of rows (80,000 viewings) peaks near 76 MB, 11 MB runs out. A real export is under 2 MB.
+  if (file.size > 4 * 1024 * 1024) return fail(413, "That CSV is larger than 4 MB.");
   try {
     return json(await importNetflix(store(), catalog(), await file.text()));
   } catch (e) {

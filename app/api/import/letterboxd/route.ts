@@ -13,7 +13,8 @@ export async function POST(request: Request) {
   const form = await request.formData().catch(() => null);
   const file = form?.get("file");
   if (!(file instanceof File)) return fail(400, "Send the Letterboxd export ZIP as the `file` field.");
-  if (file.size > 30 * 1024 * 1024) return fail(413, "That ZIP is larger than 30 MB.");
+  // The droplet container has a 128 MB heap. A real export is 0.1 to 1 MB; 40,000 films peak near 110 MB.
+  if (file.size > 5 * 1024 * 1024) return fail(413, "That ZIP is larger than 5 MB.");
   try {
     return json(await importLetterboxd(store(), catalog(), Buffer.from(await file.arrayBuffer())));
   } catch (e) {
