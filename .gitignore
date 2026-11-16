@@ -9,3 +9,6 @@ data/*.db-*
 .teyla/
 next-env.d.ts
 *.tsbuildinfo
+
+# The droplet bundle scripts/deploy.sh assembles; rebuilt on every deploy.
+/dist/
