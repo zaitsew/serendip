@@ -52,12 +52,15 @@ export function createYtStore(d: DatabaseSync, kv: Kv, now: () => number = Date.
     },
     /**
      * Holds one chunk of an upload. Uploads never clear each other: two tabs uploading at once each keep
-     * their own chunks, and each commit swaps in only its own. Abandoned uploads go after STAGE_TTL_MS.
+     * their own chunks, and each commit swaps in only its own. An upload with no new chunk for STAGE_TTL_MS is dropped whole.
      */
     stageWatched(uploadId: string, videos: WatchedVideo[], now: number = Date.now()): { staged: number } {
       d.exec("BEGIN");
       try {
-        d.prepare("DELETE FROM yt_watched_stage WHERE upload_id <> ? AND staged_at < ?").run(uploadId, now - STAGE_TTL_MS);
+        // The clock is per upload, not per row: every chunk refreshes the whole upload, so cleanup removes
+        // an upload whole or not at all and a commit never swaps in part of one.
+        d.prepare("UPDATE yt_watched_stage SET staged_at = ? WHERE upload_id = ?").run(now, uploadId);
+        d.prepare("DELETE FROM yt_watched_stage WHERE upload_id <> ? AND upload_id IN (SELECT upload_id FROM yt_watched_stage GROUP BY upload_id HAVING MAX(staged_at) < ?)").run(uploadId, now - STAGE_TTL_MS);
         const ins = d.prepare("INSERT OR REPLACE INTO yt_watched_stage (upload_id, video_id, title, channel, channel_id, last_at, plays, staged_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
         for (const v of videos) ins.run(uploadId, v.videoId, v.title, v.channel, v.channelId, v.lastAt, v.plays, now);
         const staged = n("SELECT COUNT(*) AS n FROM yt_watched_stage WHERE upload_id = ?", uploadId);

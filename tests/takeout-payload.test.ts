@@ -92,6 +92,17 @@ describe("compact Takeout through the store", () => {
     expect(s.yt.stagedCount("upload-bbbbbbbb")).toBe(2);
   });
 
+  it("never drops part of a slow upload that is still sending chunks", () => {
+    const s = createStore(openDb(":memory:"));
+    const row = (i: number) => ({ videoId: vid(i), title: "t", channel: null, channelId: null, lastAt: 1, plays: 1 });
+    const min = 60 * 1000;
+    s.yt.stageWatched("upload-aaaaaaaa", [row(1)], 0);
+    s.yt.stageWatched("upload-aaaaaaaa", [row(2)], 59 * min);
+    s.yt.stageWatched("upload-bbbbbbbb", [row(3)], 61 * min);
+    expect(s.yt.stagedCount("upload-aaaaaaaa")).toBe(2);
+    expect(s.yt.commitWatched("upload-aaaaaaaa")).toEqual({ videos: 2, channels: 0 });
+  });
+
   it("keeps the old history until the commit, and replaces it whole", () => {
     const s = createStore(openDb(":memory:"));
     importTakeout(s, text);
