@@ -187,3 +187,32 @@ describe("proxy", () => {
     for (const path of ["/", "/tv", "/setup", "/detour", "/log", "/mcpx", "/apiary"]) expect(matcher.test(path), path).toBe(true);
   });
 });
+
+describe("MCP review fixes", () => {
+  it("reads the path key from the raw URL, so Next's already-decoded params cannot double-decode it", async () => {
+    const req = new Request(`http://localhost:3140/mcp/${ENC}`, { method: "POST", headers: HEADERS, body: rpc("tools/list") });
+    const res = await mcpKey.POST(req, { params: Promise.resolve({ key: KEY }) }); // Next hands over the decoded key
+    expect(res.status).toBe(200);
+  });
+
+  it("refuses a body without Content-Length once it passes the cap, without buffering it all", async () => {
+    let pulled = 0;
+    const chunk = new Uint8Array(256 * 1024).fill(32);
+    const body = new ReadableStream<Uint8Array>({
+      pull(c) {
+        pulled++;
+        if (pulled > 40) c.close(); // 10 MB if read to the end
+        else c.enqueue(chunk);
+      },
+    });
+    const req = new Request("http://localhost:3140/mcp", {
+      method: "POST",
+      headers: { ...HEADERS, authorization: `Bearer ${KEY}` },
+      body,
+      duplex: "half",
+    } as RequestInit);
+    const res = await mcp.POST(req);
+    expect(res.status).toBe(413);
+    expect(pulled).toBeLessThan(10);
+  });
+});

@@ -22,7 +22,26 @@ export function redact(text: string, key: string | null | undefined): string {
   return out;
 }
 
-/** The key as written in a URL segment, decoded; "invalid" when it cannot be decoded, so it counts as a wrong guess. */
+/** Reads at most `limit` bytes of the body; null when it is larger, without buffering the rest. */
+async function readCapped(request: Request, limit: number): Promise<string | null> {
+  if (!request.body) return "";
+  const reader = request.body.getReader();
+  const parts: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > limit) {
+      void reader.cancel().catch(() => undefined);
+      return null;
+    }
+    parts.push(value);
+  }
+  return new TextDecoder().decode(Buffer.concat(parts));
+}
+
+/** The raw URL segment (still percent-encoded), decoded once; "invalid" when it cannot be decoded, so it counts as a wrong guess. */
 function keyFromPath(segment: string): string {
   try {
     return decodeURIComponent(segment).trim().slice(0, 512) || "invalid";
@@ -65,8 +84,8 @@ export async function handleMcp(request: Request, opts: { pathKey?: string } = {
 
   try {
     if (Number(request.headers.get("content-length") ?? 0) > MAX_BODY_BYTES) return fail(413, "Body too large.");
-    const body = await request.text();
-    if (body.length > MAX_BODY_BYTES) return fail(413, "Body too large.");
+    const body = await readCapped(request, MAX_BODY_BYTES);
+    if (body === null) return fail(413, "Body too large.");
     const headers = new Headers(request.headers);
     headers.delete("authorization");
     headers.delete("cookie");
