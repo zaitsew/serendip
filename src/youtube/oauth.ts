@@ -24,11 +24,27 @@ export const challengeOf = (verifier: string) => b64url(createHash("sha256").upd
 
 export interface OAuthConfig { clientId: string; clientSecret: string; redirectUri: string }
 
+const CALLBACK_PATH = "/api/youtube/callback";
+
+/**
+ * The redirect URI to register at Google. An explicit GOOGLE_OAUTH_REDIRECT_URI wins; else, behind a public
+ * address (SERENDIP_PUBLIC_URL), `<public url>/api/youtube/callback`; else the localhost default for dev.
+ */
+export function redirectUri(env: Record<string, string | undefined> = process.env): string {
+  const explicit = env.GOOGLE_OAUTH_REDIRECT_URI?.trim();
+  if (explicit) return explicit;
+  const pub = env.SERENDIP_PUBLIC_URL?.trim().replace(/\/+$/, "");
+  return pub ? `${pub}${CALLBACK_PATH}` : DEFAULT_REDIRECT;
+}
+
+/** True when the redirect points at this machine, so Connect must be opened from the Mac's own browser. */
+export const isLocalRedirect = (uri: string): boolean => /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:|\/|$)/i.test(uri);
+
 export function oauthConfig(env: Record<string, string | undefined> = process.env): OAuthConfig | null {
   const clientId = env.GOOGLE_OAUTH_CLIENT_ID?.trim();
   const clientSecret = env.GOOGLE_OAUTH_CLIENT_SECRET?.trim();
   if (!clientId || !clientSecret) return null;
-  return { clientId, clientSecret, redirectUri: env.GOOGLE_OAUTH_REDIRECT_URI?.trim() || DEFAULT_REDIRECT };
+  return { clientId, clientSecret, redirectUri: redirectUri(env) };
 }
 
 export function authUrl(cfg: OAuthConfig, state: string, verifier: string): string {

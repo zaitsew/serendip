@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { MAX_FIELDS } from "../src/core/detour";
+import { chunkVideos, compactTakeout, MAX_TAKEOUT_BYTES, TAKEOUT_CHUNK_SIZE } from "../src/core/takeout";
 
 export interface Bar { label: string; share: number }
 interface ChannelBar { channel: string; share: number }
@@ -84,23 +85,32 @@ export function TakeoutImporter({ onDone }: { onDone: () => void }) {
   const [busy, setBusy] = useState(false);
   const [report, setReport] = useState<TakeoutReport | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [progress, setProgress] = useState<string | null>(null);
   const upload = async (file: File) => {
     setBusy(true); setErr(null); setReport(null);
     try {
-      const form = new FormData();
-      form.set("file", file);
-      setReport(await api<TakeoutReport>("/api/import/takeout", { method: "POST", body: form }));
+      if (file.size > MAX_TAKEOUT_BYTES) throw new Error("That file is larger than 50 MB.");
+      // The browser reads the file and keeps only the compact rows; the small server never holds the raw text.
+      const { rows, skipped, videos } = compactTakeout(await file.text());
+      const uploadId = (crypto.randomUUID?.() ?? `${Date.now()}${Math.random().toString(36).slice(2)}`).replace(/[^A-Za-z0-9_-]/g, "");
+      const chunks = chunkVideos(videos);
+      for (let index = 0; index < chunks.length; index++) {
+        setProgress(`Sending ${Math.min((index + 1) * TAKEOUT_CHUNK_SIZE, videos.length).toLocaleString("en-US")} of ${videos.length.toLocaleString("en-US")} videos`);
+        await api("/api/import/takeout", jsonInit("POST", { phase: "chunk", uploadId, index, videos: chunks[index] }));
+      }
+      setProgress("Saving the history");
+      setReport(await api<TakeoutReport>("/api/import/takeout", jsonInit("POST", { phase: "commit", uploadId, rows, skipped })));
       onDone();
     } catch (e) {
       setErr((e as Error).message);
     } finally {
-      setBusy(false);
+      setBusy(false); setProgress(null);
     }
   };
   return (
     <>
       <input type="file" accept=".json,application/json" disabled={busy} onChange={(e) => { const f = e.target.files?.[0]; if (f) void upload(f); }} aria-label="YouTube watch-history.json" />
-      {busy ? <p className="notice">Reading the history. With a YouTube key this also fetches topics and can take a minute.</p> : null}
+      {busy ? <p className="notice" role="status">{progress ?? "Reading the file in your browser"}. With a YouTube key the last step also fetches topics and can take a minute.</p> : null}
       {err ? <p className="notice notice-error" role="alert">{err}</p> : null}
       {report ? (
         <p className="notice notice-good" role="status">
@@ -250,7 +260,12 @@ export function DetourView({ connectStatus }: { connectStatus: { kind: string; r
         ) : (
           <>
             <a className="btn btn-primary" href="/api/youtube/connect">Connect YouTube</a>
-            <p className="muted">Do this one step from the Mac&apos;s own browser at http://localhost:3000 (Google refuses LAN addresses as the redirect). Redirect URI: <code>{s.oauth.redirectUri}</code></p>
+            <p className="muted">
+              {s.oauth.redirectUri && /^https?:\/\/(localhost|127\.0\.0\.1)/.test(s.oauth.redirectUri)
+                ? "Do this one step from the Mac's own browser at http://localhost:3000 (Google refuses LAN addresses as the redirect). "
+                : "Open Serendip at its public address, then press Connect. "}
+              Redirect URI registered at Google must be exactly: <code>{s.oauth.redirectUri}</code>
+            </p>
           </>
         )}
       </section>

@@ -15,12 +15,16 @@ npm run dev -- -H 0.0.0.0         # open http://localhost:3000 and sign in with 
 # on the TV (same Wi-Fi): http://<mac-ip>:3000/tv     ./check.sh = the gate     ./check.sh usage = counters
 ```
 
+Live: <https://serendip.fabriquefutur.com> (bookmark `/tv` in the TV browser; the owner key signs you in once).
+Deploy with `./scripts/deploy.sh` (`--dry` prints the steps first); details in
+[deploy/droplet/README.md](deploy/droplet/README.md). Agents read `GET /api/v1/tonight` or the MCP server at `/mcp`.
+
 Without `SERENDIP_OWNER_KEY` the server refuses everything. Without `TMDB_READ_TOKEN` it runs on a
 labelled sample catalog of 32 films, with a banner that says so.
 
 ## Status
 
-Alpha, one owner. Sprints 1 and 2 ship:
+Alpha, one owner. Sprints 1, 2 and 3 ship:
 
 - **Catalog**: TMDB (Spain availability, flat rate, cached 24 h) or a labelled sample catalog.
 - **Setup** (`/setup`): services in Spain, languages, up to 15 loved films, optional disliked ones.
@@ -30,7 +34,7 @@ Alpha, one owner. Sprints 1 and 2 ship:
 - **Lean-back view** (`/tv`): D-pad remote and touch. Two layouts for review: `?v=a` and `?v=b`.
 - **Evening log** (`/log`): what you watched, from where, how much you enjoyed it, minutes to choose.
 - **Usage probe**: `./check.sh usage`.
-- **Takeout import** (`/setup`): your YouTube `watch-history.json` (up to 50 MB). Ads, YouTube Music and removed videos are ignored.
+- **Takeout import** (`/setup`): your YouTube `watch-history.json` (up to 50 MB), read in your browser, which sends only one compact row per video. Ads, YouTube Music and removed videos are ignored.
 - **The cluster** (`/setup`, `/detour`): "Your last 1,874 videos: 62 % Travel, 14 % Food" as a bar list. Topics need `YOUTUBE_API_KEY`; without it, by channel.
 - **Detour** (`/detour`, channel "Detour" on `/tv`): you name up to 8 fields, or tick six suggestions under 2 % of your history.
   Once a day, up to 12 YouTube searches (hard cap) become 12 videos: no Shorts, nothing watched, none from your top-30 channels,
@@ -38,18 +42,24 @@ Alpha, one owner. Sprints 1 and 2 ship:
 - **Playlist** (optional, `GOOGLE_OAUTH_CLIENT_ID` and `_SECRET`): a private "Serendip Detour" playlist in your YouTube account, rewritten daily, for the TV's YouTube app.
 - **Sample mode**: without `YOUTUBE_API_KEY` Detour shows six labelled cards that do not play. No LLM anywhere; official Google APIs only.
 
-Not yet: deploy to a server, MCP/JSON for agents. See [docs/PRODUCT.md](docs/PRODUCT.md).
+- **Live on the droplet** (`scripts/deploy.sh`, `deploy/droplet/`): serendip.fabriquefutur.com, one container (200 MB, 128 MB heap), HTTPS by Caddy.
+- **JSON** for agents: `GET /api/v1/health` (public: `{ok, version}`) and `GET /api/v1/tonight` (owner key: channels with picks, where to watch in Spain, why lines, trailer keys, today's Detour).
+- **MCP** at `/mcp` (bearer header) and `/mcp/<key>` (key in the URL, for connectors that cannot set a header; the key is in the URL, so treat the URL as a secret). Five tools, no model:
+  `serendip_tonight`, `serendip_channel`, `serendip_detour`, `serendip_mark`, `serendip_log_evening`.
+
+Not yet: series, an LLM programmer, a Google TV app. See [docs/PRODUCT.md](docs/PRODUCT.md).
 
 ## What is here
 
 | path | what |
 |---|---|
-| `app/`, `components/` | Next.js pages (`/tv`, `/setup`, `/detour`, `/log`) and `/api/*` |
+| `app/`, `components/` | Next.js pages (`/tv`, `/setup`, `/detour`, `/log`), `/api/*` (including `/api/v1/*`) and `/mcp` |
 | `src/core/` | pure ranking, "why" lines, title matching, the remote-control state machine, Takeout parser, topic histogram, Detour filter and ranking |
 | `src/youtube/` | YouTube Data API v3 client, Google OAuth with PKCE, the playlist calls |
 | `src/catalog/` | TMDB client with SQLite cache; the sample fixture |
 | `src/import/` | Letterboxd and Netflix import |
-| `src/server/` | SQLite store (`node:sqlite`), owner key auth |
+| `src/server/` | SQLite store (`node:sqlite`), owner key auth, the feed view, the MCP server (`mcp/`) |
+| `deploy/droplet/`, `scripts/deploy.sh` | the droplet image, compose and Caddy fragments, the deploy script |
 | `docs/` | product and roadmap, getting started |
 
 Data lives in `data/serendip.db` (gitignored). Node 24 or newer.

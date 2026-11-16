@@ -5,6 +5,9 @@ import type { WatchedVideo } from "../core/takeout";
 import type { VideoMeta } from "../core/topics";
 import type { PendingAuth } from "../youtube/oauth";
 
+/** A staged upload nobody committed is dropped after an hour. */
+export const STAGE_TTL_MS = 60 * 60 * 1000;
+
 /** The S2 half of the store: Takeout history, video metadata, quota days, Detour actions, OAuth state. */
 
 export type DetourAction = "save" | "seen" | "dismiss";
@@ -42,6 +45,42 @@ export function createYtStore(d: DatabaseSync, kv: Kv, now: () => number = Date.
         const ins = d.prepare("INSERT INTO yt_watched (video_id, title, channel, channel_id, last_at, plays) VALUES (?, ?, ?, ?, ?, ?)");
         for (const v of videos) ins.run(v.videoId, v.title, v.channel, v.channelId, v.lastAt, v.plays);
         d.exec("COMMIT");
+      } catch (e) {
+        d.exec("ROLLBACK");
+        throw e;
+      }
+    },
+    /**
+     * Holds one chunk of an upload. Uploads never clear each other: two tabs uploading at once each keep
+     * their own chunks, and each commit swaps in only its own. Abandoned uploads go after STAGE_TTL_MS.
+     */
+    stageWatched(uploadId: string, videos: WatchedVideo[], now: number = Date.now()): { staged: number } {
+      d.exec("BEGIN");
+      try {
+        d.prepare("DELETE FROM yt_watched_stage WHERE upload_id <> ? AND staged_at < ?").run(uploadId, now - STAGE_TTL_MS);
+        const ins = d.prepare("INSERT OR REPLACE INTO yt_watched_stage (upload_id, video_id, title, channel, channel_id, last_at, plays, staged_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+        for (const v of videos) ins.run(uploadId, v.videoId, v.title, v.channel, v.channelId, v.lastAt, v.plays, now);
+        const staged = n("SELECT COUNT(*) AS n FROM yt_watched_stage WHERE upload_id = ?", uploadId);
+        d.exec("COMMIT");
+        return { staged };
+      } catch (e) {
+        d.exec("ROLLBACK");
+        throw e;
+      }
+    },
+    stagedCount(uploadId: string): number { return n("SELECT COUNT(*) AS n FROM yt_watched_stage WHERE upload_id = ?", uploadId); },
+    /** Swaps the staged upload in for the whole history. Returns null when nothing was staged under that id. */
+    commitWatched(uploadId: string): { videos: number; channels: number } | null {
+      d.exec("BEGIN");
+      try {
+        const staged = n("SELECT COUNT(*) AS n FROM yt_watched_stage WHERE upload_id = ?", uploadId);
+        if (staged === 0) { d.exec("ROLLBACK"); return null; }
+        d.exec("DELETE FROM yt_watched");
+        d.prepare("INSERT INTO yt_watched (video_id, title, channel, channel_id, last_at, plays) SELECT video_id, title, channel, channel_id, last_at, plays FROM yt_watched_stage WHERE upload_id = ?").run(uploadId);
+        d.prepare("DELETE FROM yt_watched_stage WHERE upload_id = ?").run(uploadId);
+        const channels = n("SELECT COUNT(DISTINCT COALESCE(channel_id, channel)) AS n FROM yt_watched WHERE COALESCE(channel_id, channel) IS NOT NULL");
+        d.exec("COMMIT");
+        return { videos: staged, channels };
       } catch (e) {
         d.exec("ROLLBACK");
         throw e;

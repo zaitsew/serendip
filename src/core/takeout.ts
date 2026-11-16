@@ -51,7 +51,7 @@ export function videoIdFromUrl(url: unknown): string | null {
 
 function channelIdFromUrl(url: unknown): string | null {
   if (typeof url !== "string") return null;
-  const m = /\/channel\/(UC[A-Za-z0-9_-]{20,})/.exec(url);
+  const m = /\/channel\/(UC[A-Za-z0-9_-]{20,62})(?![A-Za-z0-9_-])/.exec(url);
   return m?.[1] ?? null;
 }
 
@@ -119,4 +119,32 @@ export function dedupeWatched(entries: TakeoutEntry[]): WatchedVideo[] {
     }
   }
   return [...byId.values()];
+}
+
+// --- The compact form the browser sends ----------------------------------------------------------------
+// The server has a small heap (the droplet container caps Node at 128 MB), and a Takeout file can be 50 MB.
+// So the browser parses the file with `parseTakeout` above, reduces it with `dedupeWatched`, and sends only
+// the compact rows, in chunks of `TAKEOUT_CHUNK_SIZE`. Same parser, same rules, on the other side of the wire.
+
+export const MAX_TAKEOUT_BYTES = 50 * 1024 * 1024;
+export const TAKEOUT_CHUNK_SIZE = 2000;
+/** Hard cap on videos in one history. A 50 MB file holds roughly 100,000 rows. */
+export const MAX_TAKEOUT_VIDEOS = 400_000;
+
+export interface CompactTakeout {
+  rows: number;
+  skipped: TakeoutResult["skipped"];
+  videos: WatchedVideo[];
+}
+
+/** Text in, the compact rows out. Throws `TakeoutError` exactly like `parseTakeout`. */
+export function compactTakeout(text: string): CompactTakeout {
+  const parsed = parseTakeout(text);
+  return { rows: parsed.rows, skipped: parsed.skipped, videos: dedupeWatched(parsed.entries) };
+}
+
+export function chunkVideos<T>(items: T[], size: number = TAKEOUT_CHUNK_SIZE): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
 }

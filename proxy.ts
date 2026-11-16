@@ -2,8 +2,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { gate } from "./src/server/auth";
 
 /**
- * Pages need the owner's session. /api routes check the key themselves (they answer JSON, not a
- * redirect), /signin is how you get a session, and static assets are public.
+ * Pages need the owner's session. /api routes (including the public /api/v1/health) and /mcp check the key
+ * themselves (they answer JSON, not a redirect), /signin is how you get a session, and static assets are public.
  */
 export function proxy(request: NextRequest) {
   const h = request.headers;
@@ -22,5 +22,5 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!api(?:/|$)|signin(?:/|$)|_next/|icon\\.svg$|favicon\\.ico$|robots\\.txt$).*)"],
+  matcher: ["/((?!api(?:/|$)|mcp(?:/|$)|signin(?:/|$)|_next/|icon\\.svg$|favicon\\.ico$|robots\\.txt$).*)"],
 };

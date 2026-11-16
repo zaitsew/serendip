@@ -1,11 +1,12 @@
 import { requireOwner } from "../../../../src/server/auth";
 import { depsFromEnv, finishConnect, syncToYoutube } from "../../../../src/server/detour";
+import { siteUrl } from "../../../../src/server/http";
 import { store } from "../../../../src/server/store";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
-const back = (request: Request, query: string) => new Response(null, { status: 302, headers: { location: new URL(`/detour?${query}`, request.url).toString(), "cache-control": "no-store" } });
+const back = (request: Request, query: string) => new Response(null, { status: 302, headers: { location: siteUrl(request, `/detour?${query}`), "cache-control": "no-store" } });
 
 /** Google sends the browser here with `code` and `state`. The state must match the one we issued, once. */
 export async function GET(request: Request) {
