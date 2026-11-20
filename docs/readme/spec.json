@@ -1,0 +1,26 @@
+{
+  "name": "Serendip",
+  "tagline": "Zap through films like TV channels.",
+  "summary": "One film per screen, a trailer already playing, picks from outside your usual loop.",
+  "accent": "#ffb547",
+  "accent_dark": "#ffb547",
+  "status": "building",
+  "kind": "web",
+  "platforms": ["web"],
+  "pills": ["Open source", "No LLM"],
+  "highlights": [
+    {"label": "ZAPPING", "title": "One film per screen", "text": "Up and down to zap, left and right to change channel."},
+    {"label": "TONIGHT", "title": "Only what streams in Spain", "text": "Picks come from your own services, with a one-line reason."},
+    {"label": "OUTSIDE", "title": "Out of your usual loop", "text": "Every third pick leaves your usual genres and countries."},
+    {"label": "TASTE", "title": "Bring your history", "text": "Import a Letterboxd export or a Netflix viewing history."},
+    {"label": "DETOUR", "title": "Daily YouTube detours", "text": "Twelve videos a day from fields you rarely watch."},
+    {"label": "AGENTS", "title": "JSON and MCP", "text": "Agents read tonight's picks from an API or an MCP server."}
+  ],
+  "steps": [
+    {"title": "Set up", "text": "Pick services, languages and loved films."},
+    {"title": "Import", "text": "Add Letterboxd, Netflix or YouTube history."},
+    {"title": "Rank", "text": "Deterministic scoring, a reason on every pick."},
+    {"title": "Zap", "text": "Open /tv and use the remote or touch."},
+    {"title": "Log", "text": "Record what you watched and how long you chose."}
+  ]
+}

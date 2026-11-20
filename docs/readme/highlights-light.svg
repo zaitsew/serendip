@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="284" viewBox="0 0 880 284" role="img" aria-label="Highlights. ZAPPING: One film per screen. Up and down to zap, left and right to change channel. TONIGHT: Only what streams in Spain. Picks come from your own services, with a one-line reason. OUTSIDE: Out of your usual loop. Every third pick leaves your usual genres and countries. TASTE: Bring your history. Import a Letterboxd export or a Netflix viewing history. DETOUR: Daily YouTube detours. Twelve videos a day from fields you rarely watch. AGENTS: JSON and MCP. Agents read tonight&#x27;s picks from an API or an MCP server.">
+<style>text{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text',Inter,'Segoe UI',Helvetica,Arial,sans-serif;fill:#14161D}.m{fill:#585E6D}.cap{font-size:11px;letter-spacing:.06em}.b{font-weight:600}</style>
+<rect x="0.5" y="0.5" width="879" height="283" rx="12" fill="#FFFFFF" stroke="#DCDEE5"/>
+<rect x="20.0" y="20" width="272.0" height="116" rx="10" fill="#F4F5F8"/>
+<rect x="38.0" y="39" width="8" height="8" rx="2.5" fill="#ffb547"/>
+<text class="cap b" x="52.0" y="48" font-size="12" style="fill:#8A6632;letter-spacing:.07em">ZAPPING</text>
+<text class="b" x="38.0" y="74" font-size="16.5">One film per screen</text>
+<text class="m" x="38.0" y="97" font-size="13.5">Up and down to zap, left and right to</text>
+<text class="m" x="38.0" y="116" font-size="13.5">change channel.</text>
+<rect x="304.0" y="20" width="272.0" height="116" rx="10" fill="#F4F5F8"/>
+<rect x="322.0" y="39" width="8" height="8" rx="2.5" fill="#ffb547"/>
+<text class="cap b" x="336.0" y="48" font-size="12" style="fill:#8A6632;letter-spacing:.07em">TONIGHT</text>
+<text class="b" x="322.0" y="74" font-size="16.5">Only what streams in Spain</text>
+<text class="m" x="322.0" y="97" font-size="13.5">Picks come from your own services,</text>
+<text class="m" x="322.0" y="116" font-size="13.5">with a one-line reason.</text>
+<rect x="588.0" y="20" width="272.0" height="116" rx="10" fill="#F4F5F8"/>
+<rect x="606.0" y="39" width="8" height="8" rx="2.5" fill="#ffb547"/>
+<text class="cap b" x="620.0" y="48" font-size="12" style="fill:#8A6632;letter-spacing:.07em">OUTSIDE</text>
+<text class="b" x="606.0" y="74" font-size="16.5">Out of your usual loop</text>
+<text class="m" x="606.0" y="97" font-size="13.5">Every third pick leaves your usual</text>
+<text class="m" x="606.0" y="116" font-size="13.5">genres and countries.</text>
+<rect x="20.0" y="148" width="272.0" height="116" rx="10" fill="#F4F5F8"/>
+<rect x="38.0" y="167" width="8" height="8" rx="2.5" fill="#ffb547"/>
+<text class="cap b" x="52.0" y="176" font-size="12" style="fill:#8A6632;letter-spacing:.07em">TASTE</text>
+<text class="b" x="38.0" y="202" font-size="16.5">Bring your history</text>
+<text class="m" x="38.0" y="225" font-size="13.5">Import a Letterboxd export or a Netflix</text>
+<text class="m" x="38.0" y="244" font-size="13.5">viewing history.</text>
+<rect x="304.0" y="148" width="272.0" height="116" rx="10" fill="#F4F5F8"/>
+<rect x="322.0" y="167" width="8" height="8" rx="2.5" fill="#ffb547"/>
+<text class="cap b" x="336.0" y="176" font-size="12" style="fill:#8A6632;letter-spacing:.07em">DETOUR</text>
+<text class="b" x="322.0" y="202" font-size="16.5">Daily YouTube detours</text>
+<text class="m" x="322.0" y="225" font-size="13.5">Twelve videos a day from fields you</text>
+<text class="m" x="322.0" y="244" font-size="13.5">rarely watch.</text>
+<rect x="588.0" y="148" width="272.0" height="116" rx="10" fill="#F4F5F8"/>
+<rect x="606.0" y="167" width="8" height="8" rx="2.5" fill="#ffb547"/>
+<text class="cap b" x="620.0" y="176" font-size="12" style="fill:#8A6632;letter-spacing:.07em">AGENTS</text>
+<text class="b" x="606.0" y="202" font-size="16.5">JSON and MCP</text>
+<text class="m" x="606.0" y="225" font-size="13.5">Agents read tonight&#x27;s picks from an</text>
+<text class="m" x="606.0" y="244" font-size="13.5">API or an MCP server.</text>
+</svg>
