@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="188" viewBox="0 0 880 188" role="img" aria-label="How it works. 1. Set up. Pick services, languages and loved films. 2. Import. Add Letterboxd, Netflix or YouTube history. 3. Rank. Deterministic scoring, a reason on every pick. 4. Zap. Open /tv and use the remote or touch. 5. Log. Record what you watched and how long you chose.">
+<style>text{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text',Inter,'Segoe UI',Helvetica,Arial,sans-serif;fill:#14161D}.m{fill:#585E6D}.cap{font-size:11px;letter-spacing:.06em}.b{font-weight:600}</style>
+<rect x="0.5" y="0.5" width="879" height="187" rx="12" fill="#FFFFFF" stroke="#DCDEE5"/>
+<line x1="90.0" x2="190.0" y1="52" y2="52" stroke="#DCDEE5" stroke-width="2" stroke-linecap="round"/>
+<circle cx="60.0" cy="52" r="20" fill="#ffb547"/>
+<text class="b" x="60.0" y="58" font-size="17" text-anchor="middle" style="fill:#14161D">1</text>
+<text class="b" x="40.0" y="98" font-size="15.5">Set up</text>
+<text class="m" x="40.0" y="120" font-size="13.5">Pick services,</text>
+<text class="m" x="40.0" y="139" font-size="13.5">languages and loved</text>
+<text class="m" x="40.0" y="158" font-size="13.5">films.</text>
+<line x1="250.0" x2="350.0" y1="52" y2="52" stroke="#DCDEE5" stroke-width="2" stroke-linecap="round"/>
+<circle cx="220.0" cy="52" r="20" fill="#ffb547"/>
+<text class="b" x="220.0" y="58" font-size="17" text-anchor="middle" style="fill:#14161D">2</text>
+<text class="b" x="200.0" y="98" font-size="15.5">Import</text>
+<text class="m" x="200.0" y="120" font-size="13.5">Add Letterboxd,</text>
+<text class="m" x="200.0" y="139" font-size="13.5">Netflix or YouTube</text>
+<text class="m" x="200.0" y="158" font-size="13.5">history.</text>
+<line x1="410.0" x2="510.0" y1="52" y2="52" stroke="#DCDEE5" stroke-width="2" stroke-linecap="round"/>
+<circle cx="380.0" cy="52" r="20" fill="#ffb547"/>
+<text class="b" x="380.0" y="58" font-size="17" text-anchor="middle" style="fill:#14161D">3</text>
+<text class="b" x="360.0" y="98" font-size="15.5">Rank</text>
+<text class="m" x="360.0" y="120" font-size="13.5">Deterministic scoring,</text>
+<text class="m" x="360.0" y="139" font-size="13.5">a reason on every</text>
+<text class="m" x="360.0" y="158" font-size="13.5">pick.</text>
+<line x1="570.0" x2="670.0" y1="52" y2="52" stroke="#DCDEE5" stroke-width="2" stroke-linecap="round"/>
+<circle cx="540.0" cy="52" r="20" fill="#ffb547"/>
+<text class="b" x="540.0" y="58" font-size="17" text-anchor="middle" style="fill:#14161D">4</text>
+<text class="b" x="520.0" y="98" font-size="15.5">Zap</text>
+<text class="m" x="520.0" y="120" font-size="13.5">Open /tv and use the</text>
+<text class="m" x="520.0" y="139" font-size="13.5">remote or touch.</text>
+<circle cx="700.0" cy="52" r="20" fill="#ffb547"/>
+<text class="b" x="700.0" y="58" font-size="17" text-anchor="middle" style="fill:#14161D">5</text>
+<text class="b" x="680.0" y="98" font-size="15.5">Log</text>
+<text class="m" x="680.0" y="120" font-size="13.5">Record what you</text>
+<text class="m" x="680.0" y="139" font-size="13.5">watched and how</text>
+<text class="m" x="680.0" y="158" font-size="13.5">long you chose.</text>
+</svg>
