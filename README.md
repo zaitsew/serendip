@@ -97,4 +97,6 @@ Availability data by JustWatch.
 
 Licensed under Apache-2.0.
 
+<sub>A recommender passes the Turing test when you cannot tell its pick from a friend's tip. Serendip has no model, so it only has to pass the friend test.</sub>
+
 <sub>Built by <a href="https://github.com/zaitsew">zaitsew</a> with a fleet of AI agents.</sub>
